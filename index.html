@@ -1,88 +1,596 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BotRev | Agency of Record for the Machine-First Internet</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-    <style>
-        :root { --primary: #10b981; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; line-height: 1.6; }
-        .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
-        
-        /* Header & Hero */
-        header { padding: 20px 0; border-bottom: 1px solid #334155; }
-        .logo { font-weight: 800; font-size: 1.5rem; color: var(--primary); text-decoration: none; }
-        .hero { padding: 100px 0; text-align: center; }
-        h1 { font-size: 3.5rem; font-weight: 800; margin-bottom: 20px; line-height: 1.1; }
-        .subtitle { font-size: 1.25rem; color: var(--muted); max-width: 700px; margin: 0 auto 40px; }
-        
-        /* Buttons */
-        .btn { background: var(--primary); color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; text-decoration: none; transition: 0.2s; display: inline-block; }
-        .btn:hover { background: #059669; transform: translateY(-2px); }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BotRev — Agency of Record for the Machine-First Internet</title>
+  <meta name="description" content="BotRev turns uncompensated AI bot traffic into managed revenue for publishers. Bot Extraction Optimization, detection, and marketplace routing.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ── ARCTIC SLATE — botrev.com ─────────────────────────── */
+    :root {
+      --bg:          #F0F4F8;
+      --surface:     #FFFFFF;
+      --surface-2:   #EBF2FF;
+      --border:      #E2EAF4;
+      --border-lit:  #C5D5E8;
+      --navy:        #1E3A5F;
+      --navy-mid:    #2D5A8E;
+      --navy-light:  #3B7EC8;
+      --green:       #10B981;
+      --green-dim:   #059669;
+      --green-tint:  #ECFDF5;
+      --green-deep:  #064E3B;
+      --text:        #1E3A5F;
+      --muted:       #5A7FA8;
+      --light-muted: #A8C5E8;
+      --font-display:'Syne', sans-serif;
+      --font-mono:   'DM Mono', monospace;
+    }
 
-        /* Features/Services */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, min-minmax(300px, 1fr)); gap: 30px; margin-top: 60px; }
-        .card { background: var(--card); padding: 40px; border-radius: 16px; border: 1px solid #334155; }
-        .card h3 { color: var(--primary); margin-top: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-display); background: var(--bg); color: var(--text); }
 
-        /* Audit Section */
-        .audit-box { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 60px; border-radius: 24px; text-align: center; margin: 80px 0; color: white; }
-        .audit-box h2 { font-size: 2.5rem; margin-top: 0; }
-        
-        footer { padding: 60px 0; text-align: center; color: var(--muted); border-top: 1px solid #334155; }
-    </style>
+    /* ── NAV ──────────────────────────────────────────────── */
+    nav {
+      background: var(--navy);
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 16px rgba(30,58,95,0.2);
+    }
+    .nav-inner {
+      max-width: 1200px; margin: auto;
+      padding: 0 32px; height: 60px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .logo {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 1.4rem; letter-spacing: 2px; text-transform: uppercase;
+      text-decoration: none; color: var(--green);
+    }
+    .logo span { color: var(--light-muted); }
+    .nav-links { display: flex; gap: 8px; align-items: center; }
+    .nav-link {
+      color: var(--light-muted); text-decoration: none;
+      font-size: 0.82rem; font-weight: 600; padding: 6px 14px;
+      border-radius: 6px; transition: all 0.15s; letter-spacing: 0.5px;
+    }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .nav-cta {
+      background: var(--green); color: #fff; text-decoration: none;
+      font-weight: 700; font-size: 0.82rem; padding: 8px 18px;
+      border-radius: 7px; letter-spacing: 0.5px; transition: all 0.15s;
+    }
+    .nav-cta:hover { background: var(--green-dim); }
+
+    /* ── HERO ─────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 60%, #1a4f7a 100%);
+      padding: 96px 32px 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 70% 60% at 80% 50%, rgba(16,185,129,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 40% at 10% 80%, rgba(59,126,200,0.12) 0%, transparent 60%);
+    }
+    .hero-inner {
+      max-width: 1200px; margin: auto; position: relative; z-index: 1;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center;
+    }
+    .hero-eyebrow {
+      font-family: var(--font-mono); font-size: 0.65rem;
+      letter-spacing: 3px; text-transform: uppercase;
+      color: var(--green); margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 4vw, 3.4rem); font-weight: 800;
+      line-height: 1.1; color: #fff; margin-bottom: 20px;
+    }
+    .hero h1 em { font-style: normal; color: var(--green); }
+    .hero-sub {
+      font-size: 1.05rem; line-height: 1.7; color: var(--light-muted);
+      margin-bottom: 36px; max-width: 460px;
+    }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn-hero-primary {
+      background: var(--green); color: #fff; text-decoration: none;
+      font-weight: 700; font-size: 0.9rem; padding: 14px 28px;
+      border-radius: 8px; letter-spacing: 0.5px; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-hero-primary:hover { background: var(--green-dim); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(16,185,129,0.3); }
+    .btn-hero-ghost {
+      border: 1px solid rgba(168,197,232,0.4); color: var(--light-muted);
+      text-decoration: none; font-weight: 600; font-size: 0.9rem;
+      padding: 14px 28px; border-radius: 8px; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-hero-ghost:hover { border-color: var(--green); color: var(--green); }
+
+    /* Hero right — stat card */
+    .hero-card {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(168,197,232,0.2);
+      border-radius: 16px; padding: 32px; backdrop-filter: blur(10px);
+    }
+    .hero-card-label {
+      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--light-muted); margin-bottom: 20px;
+    }
+    .tier-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 0; border-bottom: 1px solid rgba(168,197,232,0.1);
+    }
+    .tier-row:last-child { border-bottom: none; }
+    .tier-label { font-size: 0.88rem; color: #CBD8E8; }
+    .tier-examples { font-family: var(--font-mono); font-size: 0.68rem; color: var(--light-muted); margin-top: 2px; }
+    .tier-cpm { font-family: var(--font-mono); font-weight: 500; font-size: 1.1rem; }
+    .cpm-t1 { color: var(--green); }
+    .cpm-t2 { color: #60A5FA; }
+    .cpm-t3 { color: #FBBF24; }
+    .cpm-t4 { color: var(--light-muted); }
+
+    /* ── LEAK STRIP ───────────────────────────────────────── */
+    .leak-strip {
+      background: var(--navy); padding: 20px 32px;
+      border-bottom: 3px solid var(--green);
+    }
+    .leak-inner {
+      max-width: 1200px; margin: auto;
+      display: flex; justify-content: space-around; align-items: center;
+      gap: 24px; flex-wrap: wrap;
+    }
+    .leak-stat { text-align: center; }
+    .leak-val {
+      font-family: var(--font-mono); font-size: 1.8rem;
+      font-weight: 500; color: var(--green);
+    }
+    .leak-desc {
+      font-size: 0.78rem; color: var(--light-muted); margin-top: 2px;
+    }
+    .leak-div { width: 1px; height: 40px; background: rgba(168,197,232,0.15); }
+
+    /* ── SECTIONS ─────────────────────────────────────────── */
+    .section { padding: 80px 32px; }
+    .section-inner { max-width: 1200px; margin: auto; }
+    .section-alt { background: var(--surface); }
+    .section-navy { background: var(--navy); }
+
+    .section-eyebrow {
+      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 3px;
+      text-transform: uppercase; color: var(--green); margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800;
+      color: var(--navy); line-height: 1.2; margin-bottom: 16px;
+    }
+    .section-navy .section-title { color: #fff; }
+    .section-sub {
+      font-size: 1rem; color: var(--muted); line-height: 1.7;
+      max-width: 520px; margin-bottom: 48px;
+    }
+    .section-navy .section-sub { color: var(--light-muted); }
+
+    /* ── HOW IT WORKS ─────────────────────────────────────── */
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .step {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 24px;
+      box-shadow: 0 2px 8px rgba(30,58,95,0.06);
+      position: relative;
+    }
+    .step::before {
+      content: attr(data-n);
+      position: absolute; top: -14px; left: 24px;
+      background: var(--navy); color: var(--green);
+      font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500;
+      padding: 3px 10px; border-radius: 4px; letter-spacing: 1px;
+    }
+    .step h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+    .step p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
+
+    /* ── FEATURES ─────────────────────────────────────────── */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-top: 3px solid var(--green); border-radius: 12px; padding: 28px;
+      box-shadow: 0 2px 8px rgba(30,58,95,0.06); transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(30,58,95,0.12); }
+    .feature-icon {
+      width: 44px; height: 44px; background: var(--green-tint);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; margin-bottom: 16px;
+    }
+    .feature-card h3 { font-size: 1.05rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+    .feature-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
+
+    /* ── REVENUE TABLE ────────────────────────────────────── */
+    .rev-table {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(168,197,232,0.15);
+      border-radius: 12px; overflow: hidden; width: 100%;
+    }
+    .rev-table th {
+      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--light-muted);
+      padding: 14px 20px; text-align: left;
+      border-bottom: 1px solid rgba(168,197,232,0.15);
+    }
+    .rev-table td {
+      padding: 16px 20px; font-size: 0.9rem; color: #CBD8E8;
+      border-bottom: 1px solid rgba(168,197,232,0.08);
+    }
+    .rev-table tr:last-child td { border-bottom: none; }
+    .rev-table tr:hover td { background: rgba(255,255,255,0.03); }
+    .rev-cpm { font-family: var(--font-mono); font-weight: 500; font-size: 1rem; }
+    .badge-tier {
+      display: inline-block; font-family: var(--font-mono); font-size: 0.55rem;
+      letter-spacing: 1px; padding: 3px 8px; border-radius: 4px;
+      border: 1px solid; text-transform: uppercase;
+    }
+
+    /* ── MODEL SECTION ────────────────────────────────────── */
+    .model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+    .model-points { display: flex; flex-direction: column; gap: 20px; }
+    .model-point { display: flex; gap: 16px; align-items: flex-start; }
+    .model-dot {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      background: var(--green-tint); border: 2px solid var(--green);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.9rem;
+    }
+    .model-point h4 { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .model-point p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+    .model-payout {
+      background: var(--navy); border-radius: 16px; padding: 36px;
+      text-align: center;
+    }
+    .payout-number {
+      font-family: var(--font-mono); font-size: 4rem; font-weight: 500;
+      color: var(--green); line-height: 1;
+    }
+    .payout-label { color: var(--light-muted); font-size: 0.9rem; margin-top: 8px; margin-bottom: 28px; }
+    .payout-divider {
+      height: 1px; background: rgba(168,197,232,0.15); margin: 20px 0;
+    }
+    .payout-row { display: flex; justify-content: space-between; padding: 8px 0; }
+    .payout-row span { font-family: var(--font-mono); font-size: 0.8rem; color: var(--light-muted); }
+    .payout-row strong { font-family: var(--font-mono); font-size: 0.85rem; color: #fff; }
+
+    /* ── CTA ──────────────────────────────────────────────── */
+    .cta-section {
+      background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%);
+      padding: 80px 32px; text-align: center;
+      border-top: 3px solid var(--green);
+    }
+    .cta-section h2 { font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: #fff; margin-bottom: 14px; }
+    .cta-section p { color: var(--light-muted); font-size: 1rem; max-width: 500px; margin: 0 auto 36px; line-height: 1.7; }
+    .cta-email {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--green); color: #fff; text-decoration: none;
+      font-weight: 700; font-size: 1rem; padding: 16px 32px;
+      border-radius: 10px; transition: all 0.15s;
+    }
+    .cta-email:hover { background: var(--green-dim); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(16,185,129,0.35); }
+
+    /* ── FOOTER ───────────────────────────────────────────── */
+    footer {
+      background: #0F2137; padding: 32px;
+      border-top: 1px solid rgba(168,197,232,0.1);
+    }
+    .footer-inner {
+      max-width: 1200px; margin: auto;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .footer-logo { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--green); text-decoration: none; }
+    .footer-logo span { color: #4A6A8A; }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-link { color: #4A6A8A; text-decoration: none; font-size: 0.82rem; transition: color 0.15s; }
+    .footer-link:hover { color: var(--light-muted); }
+    .footer-copy { color: #2D4A6A; font-size: 0.78rem; width: 100%; text-align: center; margin-top: 12px; }
+
+    /* ── RESPONSIVE ───────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-card { display: none; }
+      .steps { grid-template-columns: 1fr 1fr; }
+      .features { grid-template-columns: 1fr 1fr; }
+      .model-grid { grid-template-columns: 1fr; }
+      .leak-div { display: none; }
+    }
+    @media (max-width: 600px) {
+      .steps, .features { grid-template-columns: 1fr; }
+      .nav-links .nav-link { display: none; }
+    }
+  </style>
 </head>
 <body>
 
-    <header>
-        <div class="container" style="display: flex; justify-content: space-between; align-items: center;">
-            <a href="/" class="logo">BotRev</a>
-            <a href="https://dash.botrev.com/login" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">Publisher Login</a>
-        </div>
-    </header>
-
-    <div class="container">
-        <section class="hero">
-            <h1>The Agency of Record for the <span style="color: var(--primary);">Machine-First</span> Internet.</h1>
-            <p class="subtitle">AI search is driving a 90% decline in referral traffic. BotRev solves the "Traffic Cliff" by turning aggressive scraping into a managed, high-yield revenue stream.</p>
-            <a href="mailto:matt@botrev.com?subject=Requesting a 48-Hour Leaky Pipe Audit" class="btn">Start Your 48-Hour Audit</a>
-        </section>
-
-        <section class="grid">
-            <div class="card">
-                <h3>Edge Interception</h3>
-                <p>Our proprietary Edge Gateway identifies "stealth crawlers" and headless browsers at the perimeter, securing your content before it's extracted.</p>
-            </div>
-            <div class="card">
-                <h3>The BotRev Vault</h3>
-                <p>We convert your site into high-speed, machine-ready Markdown stored in R2. Lower your server costs while serving AI labs exactly what they need.</p>
-            </div>
-            <div class="card">
-                <h3>Yield Arbitrage</h3>
-                <p>As your AOR, we manage licensing and payouts across TollBit, Dappier, and ProRata—ensuring you capture the highest CPM available.</p>
-            </div>
-        </section>
-
-        <section class="audit-box">
-            <h2>Stop the "Leaky Pipe."</h2>
-            <p style="font-size: 1.2rem; margin-bottom: 30px;">Install our 4-line sniffer for 48 hours. We'll show you exactly how much uncompensated AI traffic is hitting your site.</p>
-            <a href="mailto:matt@botrev.com" class="btn" style="background: #0f172a;">Contact matt@botrev.com</a>
-        </section>
-
-        <section style="text-align: center; margin-bottom: 80px;">
-            <h2>From SEO to BEO</h2>
-            <p class="subtitle">Search Engine Optimization is yielding to <b>Bot Extraction Optimization</b>. We ensure your "Ground Truth" data is citeable, accurate, and—most importantly—compensated.</p>
-        </section>
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <a class="logo" href="#">Bot<span>Rev</span></a>
+      <div class="nav-links">
+        <a class="nav-link" href="#how">How It Works</a>
+        <a class="nav-link" href="#features">Platform</a>
+        <a class="nav-link" href="#model">Pricing</a>
+        <a class="nav-cta" href="mailto:matt@botrev.com">Start Free Audit</a>
+      </div>
     </div>
+  </nav>
 
-    <footer>
-        <div class="container">
-            <p>&copy; 2026 BotRev. All rights reserved. | <a href="https://dash.botrev.com" style="color: var(--muted);">Publisher Portal</a></p>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-eyebrow">Bot Extraction Optimization · AOR for the AI Era</div>
+        <h1>Your AI traffic<br>is worth <em>money.</em></h1>
+        <p class="hero-sub">AI bots hit your site tens of thousands of times a month. They're consuming your content, fueling their models, and paying you nothing. BotRev changes that — detection, routing, and monthly payouts managed end-to-end.</p>
+        <div class="hero-actions">
+          <a class="btn-hero-primary" href="mailto:matt@botrev.com">→ Start Your Free 48-Hour Audit</a>
+          <a class="btn-hero-ghost" href="https://dash.botrev.com/login">Publisher Portal</a>
         </div>
-    </footer>
+      </div>
+      <div class="hero-card">
+        <div class="hero-card-label">CPM Recovery Matrix — Live Rates</div>
+        <div class="tier-row">
+          <div>
+            <div class="tier-label" style="font-weight:700;">T1 — Premium AI</div>
+            <div class="tier-examples">OpenAI · Claude · Perplexity · Gemini</div>
+          </div>
+          <div class="tier-cpm cpm-t1">$20.00</div>
+        </div>
+        <div class="tier-row">
+          <div>
+            <div class="tier-label">T2 — Headless Scrapers</div>
+            <div class="tier-examples">Puppeteer · Playwright · Selenium</div>
+          </div>
+          <div class="tier-cpm cpm-t2">$10.00</div>
+        </div>
+        <div class="tier-row">
+          <div>
+            <div class="tier-label">T3 — Verified Search</div>
+            <div class="tier-examples">Googlebot · Bingbot · DuckDuckBot</div>
+          </div>
+          <div class="tier-cpm cpm-t3">$5.00</div>
+        </div>
+        <div class="tier-row">
+          <div>
+            <div class="tier-label">T4 — Utility Bots</div>
+            <div class="tier-examples">General crawlers · Unidentified agents</div>
+          </div>
+          <div class="tier-cpm cpm-t4">$1.00</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAK STRIP -->
+  <div class="leak-strip">
+    <div class="leak-inner">
+      <div class="leak-stat">
+        <div class="leak-val">77%</div>
+        <div class="leak-desc">of mobile searches end without a click</div>
+      </div>
+      <div class="leak-div"></div>
+      <div class="leak-stat">
+        <div class="leak-val">$0</div>
+        <div class="leak-desc">publishers earned from AI bot traffic last year</div>
+      </div>
+      <div class="leak-div"></div>
+      <div class="leak-stat">
+        <div class="leak-val">48hr</div>
+        <div class="leak-desc">to complete the Leaky Pipe Audit</div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section class="section" id="how">
+    <div class="section-inner">
+      <div class="section-eyebrow">The Process</div>
+      <h2 class="section-title">From invisible traffic to monthly payouts</h2>
+      <p class="section-sub">Four steps. Zero technical overhead on your end. BotRev manages the full chain.</p>
+      <div class="steps">
+        <div class="step" data-n="STEP 01">
+          <h3>Install the Sniffer</h3>
+          <p>Four lines of code in your site header. Works with WordPress, Ghost, Shopify, and any GTM setup. Done in under 5 minutes.</p>
+        </div>
+        <div class="step" data-n="STEP 02">
+          <h3>48-Hour Leaky Pipe Audit</h3>
+          <p>We run a full 48-hour audit showing every AI bot that visited your site, what tier they're in, and the exact dollar value of your uncompensated traffic.</p>
+        </div>
+        <div class="step" data-n="STEP 03">
+          <h3>Marketplace Routing</h3>
+          <p>BotRev connects your traffic to TollBit, Dappier, and ProRata — routing each bot tier to the highest-yielding marketplace in real time.</p>
+        </div>
+        <div class="step" data-n="STEP 04">
+          <h3>Monthly Payouts</h3>
+          <p>We reconcile all marketplace earnings and send you a unified monthly statement. </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section section-alt" id="features">
+    <div class="section-inner">
+      <div class="section-eyebrow">The Platform</div>
+      <h2 class="section-title">Everything built for the machine-first internet</h2>
+      <p class="section-sub">BotRev isn't a plugin. It's a full monetization infrastructure stack built on Cloudflare's global edge.</p>
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Edge Bot Detection</h3>
+          <p>The BotRev Sniffer runs at the Cloudflare Worker layer — intercepting and classifying every bot before it touches your origin server. Tier 1 through Tier 4, plus stealth crawler detection for bots disguised as human browsers.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>The BotRev Vault</h3>
+          <p>Your content converted to clean Markdown and stored in a global R2 Vault. AI agents read from the Vault — not your database. Origin shielding, machine UX, and Freshness Premiums for content vaulted within 60 seconds of publication.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3>Yield Arbitrage</h3>
+          <p>BotRev routes each bot hit to the marketplace paying the highest rate at that moment — TollBit, Dappier, ProRata, and more. The Logarithmic Damper Algorithm scales CPM up to 4x during re-indexing bursts.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>Stealth Crawler Detection</h3>
+          <p>Advanced heuristics identify bots disguised as Chrome or Safari by checking Accept headers, Accept-Language, and encoding signals. Caught and logged with full documentation.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Publisher Dashboard</h3>
+          <p>Real-time audit data, vault management, marketplace status, and revenue tracking — all in one clean dashboard at dash.botrev.com. Log in with your Network ID and Access Key.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📋</div>
+          <h3>Bot Extraction Optimization</h3>
+          <p>BEO is the machine-readable equivalent of SEO. BotRev optimizes your content structure, metadata, and Vault configuration so AI agents cite your brand in their responses.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REVENUE MODEL -->
+  <section class="section section-navy" id="model">
+    <div class="section-inner">
+      <div class="section-eyebrow" style="color:var(--green);">Revenue Model</div>
+      <div class="model-grid">
+        <div>
+          <h2 class="section-title">Simple split.<br>Publisher-first.</h2>
+          <p class="section-sub">No monthly fees. No setup costs. BotRev earns only when you earn.</p>
+
+          <table class="rev-table" style="margin-bottom:32px;">
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Bot Class</th>
+                <th>Example Agents</th>
+                <th style="text-align:right;">CPM Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge-tier" style="border-color:#10B981; color:#10B981;">T1</span></td>
+                <td style="font-weight:600; color:#fff;">Premium AI</td>
+                <td style="font-size:0.8rem; color:var(--light-muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td>
+                <td style="text-align:right;"><span class="rev-cpm cpm-t1">$20.00</span></td>
+              </tr>
+              <tr>
+                <td><span class="badge-tier" style="border-color:#60A5FA; color:#60A5FA;">T2</span></td>
+                <td style="font-weight:600; color:#fff;">Headless Scrapers</td>
+                <td style="font-size:0.8rem; color:var(--light-muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td>
+                <td style="text-align:right;"><span class="rev-cpm cpm-t2">$10.00</span></td>
+              </tr>
+              <tr>
+                <td><span class="badge-tier" style="border-color:#FBBF24; color:#FBBF24;">T3</span></td>
+                <td style="font-weight:600; color:#fff;">Verified Search</td>
+                <td style="font-size:0.8rem; color:var(--light-muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td>
+                <td style="text-align:right;"><span class="rev-cpm cpm-t3">$5.00</span></td>
+              </tr>
+              <tr>
+                <td><span class="badge-tier" style="border-color:#5A7FA8; color:#5A7FA8;">T4</span></td>
+                <td style="font-weight:600; color:#fff;">Utility Bots</td>
+                <td style="font-size:0.8rem; color:var(--light-muted);">General crawlers, unidentified agents</td>
+                <td style="text-align:right;"><span class="rev-cpm cpm-t4">$1.00</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="model-points">
+            <div class="model-point">
+              <div class="model-dot">✓</div>
+              <div>
+                <h4>No upfront cost</h4>
+                <p>The 48-hour audit is completely free. No credit card, no commitment.</p>
+              </div>
+            </div>
+            <div class="model-point">
+              <div class="model-dot">✓</div>
+              <div>
+                <h4>Performance-only fee</h4>
+                <p>BotRev's 15% management fee applies only to recovered revenue. Zero revenue, zero fee.</p>
+              </div>
+            </div>
+            <div class="model-point">
+              <div class="model-dot">✓</div>
+              <div>
+                <h4>Monthly unified payout</h4>
+                <p>One statement. All marketplaces consolidated. Paid monthly.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="model-payout">
+          <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--light-muted); margin-bottom:16px;">Example Publisher — Mid-Size News Site</div>
+          <div style="font-size:0.85rem; color:var(--light-muted); margin-bottom:6px;">Monthly AI Bot Traffic</div>
+          <div style="font-family:var(--font-mono); font-size:1.4rem; color:#fff; margin-bottom:20px;">120,000 hits/mo</div>
+          <div class="payout-divider"></div>
+          <div class="payout-row">
+            <span>T1 Premium AI (8k hits)</span>
+            <strong>$160.00</strong>
+          </div>
+          <div class="payout-row">
+            <span>T2 Headless (22k hits)</span>
+            <strong>$220.00</strong>
+          </div>
+          <div class="payout-row">
+            <span>T3 Search (45k hits)</span>
+            <strong>$225.00</strong>
+          </div>
+          <div class="payout-row">
+            <span>T4 Utility (45k hits)</span>
+            <strong>$45.00</strong>
+          </div>
+          <div class="payout-divider"></div>
+          <div class="payout-row">
+            <span>Gross Recovery</span>
+            <strong style="color:#fff;">$650.00</strong>
+          </div>
+          <div class="payout-row">
+            <span>BotRev Fee (15%)</span>
+            <strong style="color:var(--light-muted);">−$97.50</strong>
+          </div>
+          <div class="payout-divider"></div>
+          <div style="margin-top:16px;">
+            <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Publisher Net Monthly Payout</div>
+            <div class="payout-number">$552.50</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="section-eyebrow" style="color:var(--green); margin-bottom:12px;">Get Started Today</div>
+    <h2>Start your free 48-hour audit.</h2>
+    <p>No commitment. No cost. We show you the exact dollar value of your uncompensated bot traffic — then you decide.</p>
+    <a class="cta-email" href="mailto:matt@botrev.com">
+      → matt@botrev.com
+    </a>
+    <div style="margin-top:20px; font-family:var(--font-mono); font-size:0.7rem; color:rgba(168,197,232,0.5);">
+      Already a publisher? <a href="https://dash.botrev.com/login" style="color:var(--green); text-decoration:none;">Sign in to your dashboard →</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-inner">
+      <a class="footer-logo" href="#">Bot<span>Rev</span></a>
+      <div class="footer-links">
+        <a class="footer-link" href="mailto:matt@botrev.com">Contact</a>
+        <a class="footer-link" href="https://dash.botrev.com/login">Publisher Portal</a>
+        <a class="footer-link" href="mailto:matt@botrev.com">Privacy Policy</a>
+      </div>
+    </div>
+    <div class="footer-copy">© 2026 BotRev. Agency of Record for the Machine-First Internet. Chicago, IL.</div>
+  </footer>
 
 </body>
 </html>
