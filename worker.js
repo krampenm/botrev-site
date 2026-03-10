@@ -1,0 +1,1339 @@
+/**
+ * BotRev Cloudflare Worker — dash.botrev.com
+ * Vault + Bot Sniffer | Full AOR Infrastructure
+ * Version 16.0 — March 2026 — Remove debug endpoint, production clean
+ *
+ * BINDINGS REQUIRED in wrangler.toml:
+ *   [[d1_databases]]
+ *   binding = "DB"
+ *   database_name = "botrev-db"
+ *   database_id = "<YOUR_D1_ID>"
+ *
+ *   [[r2_buckets]]
+ *   binding = "VAULT"
+ *   bucket_name = "botrev-vault"
+ */
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    let path = url.pathname.toLowerCase();
+    if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+
+    // CPM Recovery Tiers (value per single hit)
+    const TIERS = {
+      TIER1: 20.00 / 1000,   // Premium AI
+      TIER2: 10.00 / 1000,   // Advanced Scrapers
+      TIER3:  5.00 / 1000,   // Verified Search
+      TIER4:  1.00 / 1000,   // General/Utility
+    };
+
+    // Logarithmic Damper config
+    const DAMPER_WINDOW_MINUTES = 10;
+    const DAMPER_SURGE_MULTIPLIER = 4; // max 4x CPM during burst
+
+    // ============================================================
+    // 0. PUBLISHER DOMAIN INTERCEPT
+    // ============================================================
+    // When this Worker is deployed as a route on a publisher's domain
+    // (e.g. *krampencrawler.com/*), the hostname will NOT be dash.botrev.com.
+    // In that case we:
+    //   1. Look up the publisher's audit_id by hostname in publisher_entities
+    //   2. Run bot detection on every request
+    //   3. Log bot hits to D1 tagged with that publisher's audit_id
+    //   4. Fetch and return the original request from the publisher's origin
+    // Human traffic is passed through transparently with zero latency impact.
+
+    const rawHostname = url.hostname;                          // e.g. www.krampencrawler.com
+    const hostname    = rawHostname.replace(/^www\./, '');   // e.g. krampencrawler.com
+    const isBotRevDomain = hostname === 'dash.botrev.com' || hostname === 'botrev.com';
+
+    if (!isBotRevDomain) {
+      // ── Look up publisher by domain ────────────────────────────
+      // Pulls audit_id, integration_type (A/B/C), and origin_server (Option B only)
+      let publisherAuditId   = null;
+      let integrationType    = "A";
+      let publisherOrigin    = null;
+
+      try {
+        const pub = await env.DB
+          .prepare("SELECT audit_id, integration_type, origin_server FROM publisher_entities WHERE LOWER(domain_name) = LOWER(?) LIMIT 1")
+          .bind(hostname)
+          .first();
+        publisherAuditId = pub?.audit_id       || null;
+        integrationType  = pub?.integration_type || "A";
+        publisherOrigin  = pub?.origin_server   || null;
+      } catch (e) {
+        // DB lookup failed — still pass traffic through, just don't log
+      }
+
+      // ── Run bot detection ──────────────────────────────────────
+      if (publisherAuditId) {
+        const ua   = request.headers.get("User-Agent") || "Unknown";
+        const ref  = request.headers.get("Referer") || "";
+        const path = url.pathname + (url.search || "");
+        const botClass = classifyBot(ua);
+        const stealth  = isStealthCrawler(request);
+        const isCleanHuman = /mozilla|chrome|safari|firefox/i.test(ua) && !stealth && !botClass;
+
+        if (!isCleanHuman) {
+          try {
+            const effectiveTier = botClass ? botClass.tier : 4;
+            const effectiveCPM  = botClass ? botClass.cpm : TIERS.TIER4;
+            const dampedCPM     = await getDampedCPM(publisherAuditId, effectiveCPM);
+            const isStealthFlag = (stealth && !botClass) ? 1 : 0;
+
+            await env.DB.prepare(
+              "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, referer, path, domain) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)"
+            ).bind(publisherAuditId, ua, effectiveTier, dampedCPM, isStealthFlag, ref, path, rawHostname).run();
+          } catch (e) {
+            // Log failure — don't block the request
+          }
+        }
+      }
+
+      // ── Pass request through to publisher origin ───────────────
+      // Option A: Worker route on publisher's own Cloudflare zone.
+      //   → fetch(originalURL) works fine — Worker runs on their zone,
+      //     Cloudflare resolves to their real origin server.
+      //
+      // Option B: Cloudflare for SaaS. Publisher's www CNAMEs to proxy.botrev.com.
+      //   → MUST rewrite the URL to their stored origin_server.
+      //     Fetching the original URL here would re-enter BotRev's zone → infinite loop.
+      //
+      // Option C: JS snippet. Never hits this intercept block (snippet calls /api/sniff directly).
+
+      try {
+        let fetchURL = request.url;
+        let fetchHeaders = new Headers(request.headers);
+
+        if (integrationType === "B" && publisherOrigin) {
+          // CRITICAL: Use the apex hostname (no www) for the fetch URL.
+          // www.krampencrawler.com CNAMEs to proxy.botrev.com — if we fetch
+          // that URL with resolveOverride it re-enters BotRev's Worker and loops.
+          // The apex domain (krampencrawler.com) resolves to Cloudflare's proxy
+          // for krampencrawler.com's own zone, which correctly forwards to Namecheap.
+          // resolveOverride then forces that connection to the real origin IP,
+          // bypassing Cloudflare's public DNS. This is exactly what the debug test
+          // confirmed returns 200 with LiteSpeed headers from Namecheap.
+          const originURL = new URL(request.url);
+          originURL.hostname = hostname;   // apex domain, www stripped
+          originURL.protocol = "https:";
+          fetchURL = originURL.toString();
+
+          fetchHeaders.set("X-Forwarded-Host", rawHostname);  // tell origin the real requested host
+          fetchHeaders.set("X-Forwarded-Proto", "https");
+
+          // Replace the incoming User-Agent with a neutral browser UA before
+          // forwarding to origin. Cloudflare's Bot Fight Mode on the publisher's
+          // zone would otherwise block known bot UAs (GPTBot, CCBot, etc.) before
+          // they reach Namecheap. We already logged the real UA to D1 above.
+          // The original UA is preserved in X-BotRev-Original-UA for transparency.
+          const realUA = fetchHeaders.get("User-Agent") || "";
+          if (realUA) fetchHeaders.set("X-BotRev-Original-UA", realUA);
+          fetchHeaders.set("User-Agent", "Mozilla/5.0 (compatible; BotRev-Proxy/1.0)");
+        }
+
+        const originRequest = new Request(fetchURL, {
+          method:  request.method,
+          headers: fetchHeaders,
+          body:    request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+          redirect: "manual", // don't follow redirects — we handle them below
+        });
+
+        let originResponse = await fetch(originRequest, {
+          cf: integrationType === "B" && publisherOrigin ? {
+            // Force DNS to resolve to the real origin server IP.
+            // This bypasses Cloudflare's public DNS so we hit Namecheap's actual
+            // server directly, while keeping the hostname intact for correct TLS SNI.
+            resolveOverride: publisherOrigin,
+          } : {}
+        });
+
+        // If origin returns a redirect (e.g. HTTP→HTTPS 301), rewrite the
+        // Location header to point back to the public hostname, not the origin IP.
+        if (originResponse.status >= 300 && originResponse.status < 400) {
+          const location = originResponse.headers.get("Location") || "";
+          if (location.includes(publisherOrigin)) {
+            const rewritten = location.replace(publisherOrigin, hostname);
+            const newHeaders = new Headers(originResponse.headers);
+            newHeaders.set("Location", rewritten);
+            return new Response(originResponse.body, {
+              status: originResponse.status,
+              headers: newHeaders,
+            });
+          }
+        }
+
+        return originResponse;
+      } catch (e) {
+        return new Response("BotRev: Origin unreachable — check origin_server config in Fleet Command", { status: 502 });
+      }
+    }
+
+    // ============================================================
+    // 1. CORE CONFIGURATION
+    // ============================================================
+    const ADMIN_PASSWORD    = "Morgan123";
+    const SECRET_ADMIN_PATH = "/admin-portal-access";
+    const ONBOARDING_PATH   = "/admin-onboard-client";
+    const MANAGEMENT_FEE    = 0.15;
+
+    // ============================================================
+    // 2. TIER DETECTION ENGINE (Bot Sniffer) — defined above intercept block
+    // ============================================================
+    function classifyBot(ua = "") {
+      const l = ua.toLowerCase();
+
+      // TIER 1 — Premium AI Agents
+      if (/gptbot|openai|chatgpt|gpt-?[45]|oai-searchbot|claudebot|claude-web|anthropic|applebot|perplexity|bytespider|ccbot|imagesift|gemini|google-extended|cohere|you\.com|phind|groq|amazonbot|diffbot|meta-externalagent|facebookexternalhit/.test(l)) {
+        return { tier: 1, cpm: TIERS.TIER1, label: "Premium AI" };
+      }
+
+      // TIER 2 — Advanced Headless / Automation
+      if (/headlesschrome|headless|puppeteer|selenium|playwright|phantomjs|webdriver|chrome-lighthouse|scrapy|wget|curl|python-requests|axios|go-http-client/.test(l)) {
+        return { tier: 2, cpm: TIERS.TIER2, label: "Headless Scraper" };
+      }
+
+      // TIER 3 — Verified Search Engines
+      if (/googlebot|bingbot|duckduckbot|slurp|baidu|yandex|sogou|exabot/.test(l)) {
+        return { tier: 3, cpm: TIERS.TIER3, label: "Verified Search" };
+      }
+
+      // Generic bot detection (Tier 4)
+      if (/bot|crawler|spider|scraper|monitor|fetch|scan|archive|feed|rss|http|java|ruby|php/.test(l)) {
+        return { tier: 4, cpm: TIERS.TIER4, label: "Utility Bot" };
+      }
+
+      return null; // not a bot
+    }
+
+    function isStealthCrawler(request) {
+      const ua     = request.headers.get("User-Agent") || "";
+      const accept = request.headers.get("Accept") || "";
+      const lang   = request.headers.get("Accept-Language") || "";
+      const enc    = request.headers.get("Accept-Encoding") || "";
+
+      // Stealth heuristics: looks human but lacks human signals
+      const looksHuman = /mozilla|chrome|safari|firefox/i.test(ua);
+      const hasHumanAcceptHeader = /text\/html/.test(accept);
+      const hasHumanLang  = lang.length > 0;
+      const hasHumanEnc   = /gzip/.test(enc);
+      const humanScore = [hasHumanAcceptHeader, hasHumanLang, hasHumanEnc].filter(Boolean).length;
+
+      // Stealth = claims to be human browser but missing ≥2 human signals
+      return looksHuman && humanScore < 2;
+    }
+
+    // ============================================================
+    // 3. LOGARITHMIC DAMPER ALGORITHM
+    // ============================================================
+    async function getDampedCPM(auditId, baseCPM) {
+      try {
+        const windowStart = new Date(Date.now() - DAMPER_WINDOW_MINUTES * 60 * 1000).toISOString();
+        const result = await env.DB
+          .prepare("SELECT COUNT(*) as surge FROM bot_logs WHERE audit_id = ? AND timestamp > ?")
+          .bind(auditId, windowStart)
+          .first();
+        const surge = result?.surge || 0;
+
+        // Logarithmic damper: multiplier = 1 + log(surge/anchor + 1)
+        // Caps at DAMPER_SURGE_MULTIPLIER to keep rates viable for buyers
+        const anchor = 100; // baseline hits per window (set per-publisher in production)
+        const rawMultiplier = 1 + Math.log((surge / anchor) + 1);
+        const multiplier = Math.min(rawMultiplier, DAMPER_SURGE_MULTIPLIER);
+
+        return baseCPM * multiplier;
+      } catch {
+        return baseCPM;
+      }
+    }
+
+    // ============================================================
+    // 4. VAULT OPERATIONS (R2)
+    // ============================================================
+    async function vaultStore(auditId, slug, html) {
+      const markdown = htmlToMarkdown(html);
+      const hash     = await sha256(markdown);
+      const meta = {
+        audit_id:       auditId,
+        slug,
+        last_vaulted:   new Date().toISOString(),
+        content_hash:   hash,
+        char_count:     markdown.length,
+        freshness_flag: true,
+      };
+
+      const key = `${auditId}/${slug}.md`;
+      const metaKey = `${auditId}/${slug}.meta.json`;
+
+      await env.VAULT.put(key, markdown, {
+        httpMetadata: { contentType: "text/markdown" },
+        customMetadata: { audit_id: auditId, slug, hash },
+      });
+      await env.VAULT.put(metaKey, JSON.stringify(meta), {
+        httpMetadata: { contentType: "application/json" },
+      });
+
+      // Log the vault event in D1
+      await env.DB
+        .prepare("INSERT INTO vault_objects (audit_id, slug, content_hash, char_count, last_vaulted) VALUES (?, ?, ?, ?, datetime('now')) ON CONFLICT(audit_id, slug) DO UPDATE SET content_hash=excluded.content_hash, char_count=excluded.char_count, last_vaulted=excluded.last_vaulted")
+        .bind(auditId, slug, hash, markdown.length)
+        .run();
+
+      return { key, hash, char_count: markdown.length };
+    }
+
+    async function vaultRetrieve(auditId, slug) {
+      const key     = `${auditId}/${slug}.md`;
+      const metaKey = `${auditId}/${slug}.meta.json`;
+
+      const [obj, metaObj] = await Promise.all([
+        env.VAULT.get(key),
+        env.VAULT.get(metaKey),
+      ]);
+
+      if (!obj) return null;
+
+      const content = await obj.text();
+      const meta    = metaObj ? JSON.parse(await metaObj.text()) : {};
+      return { content, meta };
+    }
+
+    async function vaultList(auditId) {
+      const listed = await env.VAULT.list({ prefix: `${auditId}/` });
+      return listed.objects
+        .filter(o => o.key.endsWith('.md'))
+        .map(o => ({
+          key:   o.key,
+          slug:  o.key.replace(`${auditId}/`, '').replace('.md', ''),
+          size:  o.size,
+          etag:  o.etag,
+        }));
+    }
+
+    // ============================================================
+    // 5. UTILITY HELPERS
+    // ============================================================
+    function htmlToMarkdown(html) {
+      // Strip all HTML tags, convert headings, preserve links as text
+      return html
+        .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, (_, t) => `## ${t.replace(/<[^>]+>/g, '')}\n\n`)
+        .replace(/<p[^>]*>(.*?)<\/p>/gis, (_, t) => `${t.replace(/<[^>]+>/g, '')}\n\n`)
+        .replace(/<li[^>]*>(.*?)<\/li>/gi, (_, t) => `- ${t.replace(/<[^>]+>/g, '')}\n`)
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, (_, href, text) => `[${text.replace(/<[^>]+>/g, '')}](${href})`)
+        .replace(/<[^>]+>/g, '')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    async function sha256(text) {
+      const buf  = new TextEncoder().encode(text);
+      const hash = await crypto.subtle.digest("SHA-256", buf);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function getDomainName(aid) {
+      const res = await env.DB.prepare("SELECT domain_name FROM publisher_entities WHERE audit_id = ? LIMIT 1").bind(aid).first();
+      return res ? res.domain_name : aid;
+    }
+
+    async function getMarketplaceDetails(aid, m, range = "all") {
+      try {
+        const entity = await env.DB.prepare(
+          "SELECT api_key, domain_name FROM publisher_marketplaces JOIN publisher_entities ON publisher_marketplaces.audit_id = publisher_entities.audit_id WHERE publisher_marketplaces.audit_id = ? AND marketplace_name = ? LIMIT 1"
+        ).bind(aid, m).first();
+
+        if (!entity?.api_key || entity.api_key.length < 5 || entity.api_key === "DEMO") {
+          return { status: "Offline", gross: 0, net: 0, breakdown: [], msg: "Missing Key" };
+        }
+
+        const days = (range === "7") ? 7 : (range === "30") ? 30 : 90;
+        const endpoints = {
+          "TollBit":   `https://api.tollbit.com/v1/publisher/analytics?days=${days}`,
+          "Dappier":   `https://api.dappier.com/v1/publisher/stats?period=${days}d`,
+          "ProRata":   `https://api.prorata.ai/v1/publisher/revenue?days=${days}`,
+          "Microsoft": "https://api.bing.com/v1/publisher/revenue",
+          "Amazon":    "https://api.amazon.com/v1/publisher/ad-intel",
+        };
+
+        const res = await fetch(endpoints[m], {
+          headers: {
+            "Authorization": `Bearer ${entity.api_key}`,
+            "x-api-key": entity.api_key,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(4000),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const gross = Number(data.total_earnings || data.revenue || data.earnings || data.amount || 0);
+
+        return { status: "Active", gross, net: gross * (1 - MANAGEMENT_FEE), breakdown: data.bots || data.breakdown || [] };
+      } catch (e) {
+        return { status: "Sync Error", gross: 0, net: 0, breakdown: [], msg: e.message };
+      }
+    }
+
+    // ============================================================
+    // 6. SHARED BRAND CSS
+    // ============================================================
+    const brandHead = `
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ── ARCTIC SLATE THEME ─────────────────────────────────────── */
+  :root {
+    --bg:          #F0F4F8;
+    --surface:     #FFFFFF;
+    --surface-2:   #EBF2FF;
+    --border:      #E2EAF4;
+    --border-lit:  #C5D5E8;
+    --navy:        #1E3A5F;
+    --navy-mid:    #2D5A8E;
+    --green:       #10B981;
+    --green-dim:   #059669;
+    --green-tint:  #ECFDF5;
+    --amber:       #f59e0b;
+    --red:         #ef4444;
+    --blue:        #2D5A8E;
+    --text:        #1E3A5F;
+    --muted:       #5A7FA8;
+    --font-display: 'Syne', sans-serif;
+    --font-mono:    'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-display); background: var(--bg); color: var(--text); min-height: 100vh; }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse 80% 50% at 10% 0%, rgba(16,185,129,0.05) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 90% 100%, rgba(45,90,142,0.06) 0%, transparent 60%);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1280px; margin: auto; padding: 0 32px; }
+
+  /* Logo — navy background bar at top */
+  .top-bar { background: var(--navy); padding: 0 32px; position: sticky; top: 0; z-index: 100;
+             box-shadow: 0 2px 12px rgba(30,58,95,0.15); }
+  .logo { font-family: var(--font-display); font-weight: 800; font-size: 1.3rem;
+          color: var(--green); letter-spacing: 2px; text-transform: uppercase; text-decoration: none; }
+  .logo span { color: #A8C5E8; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 12px; padding: 24px; margin-bottom: 16px;
+          box-shadow: 0 1px 4px rgba(30,58,95,0.06); }
+  .card-lit { border-color: var(--navy-mid); border-top: 3px solid var(--green); }
+
+  /* Stats */
+  .stat-val { font-family: var(--font-mono); font-size: 2.4rem; font-weight: 500;
+              color: var(--navy); line-height: 1; }
+  .stat-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px;
+                text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 8px;
+         font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; letter-spacing: 1px;
+         text-transform: uppercase; cursor: pointer; border: none; text-decoration: none; transition: all 0.15s; }
+  .btn-primary { background: var(--green); color: #fff; }
+  .btn-primary:hover { background: var(--green-dim); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border-lit); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+  .btn-navy { background: var(--navy); color: #fff; }
+  .btn-navy:hover { background: var(--navy-mid); }
+  .btn-sm { padding: 6px 14px; font-size: 0.7rem; }
+
+  /* Inputs */
+  .input { width: 100%; padding: 11px 14px; background: var(--bg); border: 1px solid var(--border);
+           border-radius: 8px; color: var(--text); font-family: var(--font-mono);
+           font-size: 0.85rem; outline: none; transition: border-color 0.15s; }
+  .input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(16,185,129,0.1); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; }
+  th { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase;
+       color: var(--muted); padding: 12px 8px; border-bottom: 2px solid var(--border); text-align: left; }
+  td { padding: 14px 8px; border-bottom: 1px solid var(--border); font-size: 0.85rem; vertical-align: middle; }
+  tr:hover td { background: var(--surface-2); }
+
+  /* Badges */
+  .badge { display: inline-block; font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px;
+           font-weight: 500; padding: 3px 7px; border-radius: 4px; text-transform: uppercase; border: 1px solid; }
+  .badge-t1 { border-color: var(--green); color: var(--green); background: var(--green-tint); }
+  .badge-t2 { border-color: var(--blue); color: var(--blue); background: #EBF2FF; }
+  .badge-t3 { border-color: var(--amber); color: var(--amber); background: #FFFBEB; }
+  .badge-t4 { border-color: var(--muted); color: var(--muted); background: var(--bg); }
+  .badge-active { border-color: var(--green); color: var(--green); background: var(--green-tint); }
+  .badge-error  { border-color: var(--red); color: var(--red); background: #FEF2F2; }
+  .badge-warn   { border-color: var(--amber); color: var(--amber); background: #FFFBEB; }
+
+  /* Tab nav */
+  .tab-nav { display: flex; gap: 4px; margin-bottom: 32px; background: var(--surface);
+             border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content;
+             box-shadow: 0 1px 3px rgba(30,58,95,0.06); }
+  .tab-link { padding: 8px 20px; border-radius: 7px; font-family: var(--font-mono); font-size: 0.7rem;
+              letter-spacing: 1px; text-transform: uppercase; text-decoration: none; color: var(--muted);
+              font-weight: 500; transition: all 0.15s; }
+  .tab-link.active { background: var(--navy); color: #fff; font-weight: 700; }
+  .tab-link:not(.active):hover { color: var(--text); background: var(--bg); }
+
+  /* Pulse dot */
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot-green { background: var(--green); animation: pulse 2s infinite; }
+  .dot-amber { background: var(--amber); }
+  .dot-gray  { background: var(--muted); }
+  @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 50% { opacity:.7; box-shadow: 0 0 0 6px rgba(16,185,129,0); } }
+
+  /* Code */
+  code { font-family: var(--font-mono); font-size: 0.78rem; background: var(--green-tint);
+         color: var(--green-dim); padding: 2px 7px; border-radius: 4px; }
+
+  /* Grid helpers */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media(max-width: 768px) { .grid-3,.grid-4 { grid-template-columns: 1fr 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+
+  /* Vault pill */
+  .vault-bar { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono);
+               font-size: 0.7rem; color: var(--muted); background: var(--bg);
+               border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; }
+  .vault-bar .dot-green { animation: none; background: var(--green); }
+
+  /* Sniffer wave */
+  .sniffer-live { position: relative; overflow: hidden; }
+  .sniffer-live::after { content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(16,185,129,0.06), transparent);
+    animation: sweep 3s linear infinite; }
+  @keyframes sweep { to { left: 150%; } }
+
+  /* Tier bar chart */
+  .tier-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 6px; }
+  .tier-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+  /* Top bar nav layout */
+  .top-bar-inner { display: flex; justify-content: space-between; align-items: center;
+                   max-width: 1280px; margin: auto; height: 56px; }
+  .top-bar-right { display: flex; gap: 8px; align-items: center; }
+  .top-bar .btn-ghost { border-color: rgba(168,197,232,0.3); color: #A8C5E8; }
+  .top-bar .btn-ghost:hover { border-color: var(--green); color: var(--green); }
+  .top-bar .stat-label { color: #A8C5E8; }
+</style>`;
+
+    // ============================================================
+    // 7. ADMIN FLEET COMMAND
+    // ============================================================
+    if (path.startsWith(SECRET_ADMIN_PATH)) {
+      const pass = url.searchParams.get("pass");
+      if (pass !== ADMIN_PASSWORD) return new Response("Forbidden", { status: 403 });
+
+      const { results } = await env.DB.prepare(`
+        SELECT pe.*,
+          (SELECT COUNT(*) FROM bot_logs WHERE audit_id = pe.audit_id AND is_bot = 1) as total_bot_hits,
+          (SELECT COUNT(*) FROM bot_logs WHERE audit_id = pe.audit_id AND is_bot = 1 AND timestamp > datetime('now','-1 day')) as recent_bot_hits,
+          (SELECT COUNT(*) FROM vault_objects WHERE audit_id = pe.audit_id) as vault_count
+        FROM publisher_entities pe
+      `).all();
+
+      const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+      const fullList = await Promise.all(results.map(async r => {
+        const mktData = await Promise.all(markets.map(m => getMarketplaceDetails(r.audit_id, m)));
+        return { ...r, total_mkt_gross: mktData.reduce((sum, mk) => sum + mk.gross, 0), mktStats: mktData };
+      }));
+
+      const fleetGross = fullList.reduce((sum, r) => sum + r.total_mkt_gross, 0);
+      const totalBots  = results.reduce((sum, r) => sum + (r.total_bot_hits || 0), 0);
+      const totalVault = results.reduce((sum, r) => sum + (r.vault_count || 0), 0);
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>Fleet Command — BotRev</title></head><body>
+<div class="top-bar">
+  <div class="top-bar-inner">
+    <div>
+      <a class="logo" href="#">Bot<span>Rev</span></a>
+      <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:3px; color:#A8C5E8; margin-top:2px; text-transform:uppercase;">Fleet Command · Admin</div>
+    </div>
+    <div class="top-bar-right">
+      <button onclick="exportSelectedCSV()" class="btn btn-ghost btn-sm">↓ Export CSV</button>
+      <a href="${ONBOARDING_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary btn-sm">+ Onboard Publisher</a>
+    </div>
+  </div>
+</div>
+<div class="wrap" style="padding-top:32px; padding-bottom:80px;">
+
+  <!-- Fleet Stats -->
+  <div class="grid-4" style="margin-bottom:32px;">
+    <div class="card card-lit sniffer-live">
+      <div class="stat-label">Fleet Gross Revenue</div>
+      <div class="stat-val" style="color:var(--green);">$${fleetGross.toFixed(2)}</div>
+      <div style="margin-top:8px; font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">BotRev 15% → $${(fleetGross*0.15).toFixed(2)}</div>
+    </div>
+    <div class="card">
+      <div class="stat-label">Total Bot Hits</div>
+      <div class="stat-val">${totalBots.toLocaleString()}</div>
+    </div>
+    <div class="card">
+      <div class="stat-label">Active Properties</div>
+      <div class="stat-val">${fullList.length}</div>
+    </div>
+    <div class="card">
+      <div class="stat-label">Vault Objects</div>
+      <div class="stat-val" style="color:var(--blue);">${totalVault.toLocaleString()}</div>
+    </div>
+  </div>
+
+  <!-- Publisher Table -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <div style="font-family:var(--font-mono); font-size:0.7rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted);">Publisher Fleet</div>
+      <input type="text" id="netSearch" onkeyup="filterTable()" placeholder="Search domain or network ID…" class="input" style="max-width:280px; padding:8px 12px; font-size:0.75rem;">
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:30px;"><input type="checkbox" id="masterCb" onclick="toggleAll(this)" style="accent-color:var(--green);"></th>
+        <th>Property</th>
+        <th>Sniffer</th>
+        <th>Vault</th>
+        <th>API Sync</th>
+        <th>Gross Rev.</th>
+        <th>Actions</th>
+      </tr></thead>
+      <tbody>
+      ${fullList.map(r => {
+        let snColor = "var(--muted)", snLabel = "PENDING", snPulse = false;
+        if (r.total_bot_hits > 0) {
+          if (r.recent_bot_hits > 0) { snColor = "var(--green)"; snLabel = "ACTIVE"; snPulse = true; }
+          else { snColor = "var(--amber)"; snLabel = "STALE"; }
+        }
+        return `
+        <tr class="net-row">
+          <td><input type="checkbox" class="row-cb" data-aid="${r.audit_id}" style="accent-color:var(--green);"></td>
+          <td>
+            <div style="font-weight:700;">${r.domain_name}</div>
+            <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${r.pub_user_id}</div>
+          </td>
+          <td>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span class="dot ${snPulse ? 'dot-green' : ''}" style="background:${snColor};"></span>
+              <span style="font-family:var(--font-mono); font-size:0.6rem; color:${snColor}; letter-spacing:1px;">${snLabel}</span>
+            </div>
+          </td>
+          <td>
+            <div class="vault-bar">
+              <span class="dot" style="background:${r.vault_count > 0 ? 'var(--blue)' : 'var(--muted)'};"></span>
+              <span style="color:${r.vault_count > 0 ? 'var(--blue)' : 'var(--muted)'};">${r.vault_count || 0} objects</span>
+            </div>
+          </td>
+          <td><div style="display:flex; gap:4px;">${r.mktStats.map((m,i)=>`<span class="badge badge-${m.status==='Active'?'active':'error'}">${markets[i][0]}</span>`).join('')}</div></td>
+          <td><span style="font-family:var(--font-mono); font-weight:500; color:var(--green);">$${r.total_mkt_gross.toFixed(2)}</span></td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <button onclick="window.location.href='/dashboard?entity=${r.pub_user_id}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
+              <button onclick="resetPass('${r.pub_user_id}')" class="btn btn-ghost btn-sm">Key</button>
+              <button onclick="deletePublisher('${r.audit_id}','${r.domain_name}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const fullData = ${JSON.stringify(fullList)};
+  function toggleAll(m){ document.querySelectorAll('.row-cb').forEach(c => { if(c.closest('tr').style.display !== 'none') c.checked = m.checked; }); }
+  function filterTable(){ var v = document.getElementById("netSearch").value.toUpperCase(); document.querySelectorAll(".net-row").forEach(r => { r.style.display = r.innerText.toUpperCase().includes(v) ? "" : "none"; }); }
+  async function resetPass(u){ var n = prompt("New Access Key for "+u+":"); if(n){ await fetch("/api/update-account?entity="+u+"&pass="+encodeURIComponent(n),{method:"POST"}); alert("Key updated."); } }
+
+  let _pendingDelete = null;
+  function deletePublisher(auditId, domain){
+    _pendingDelete = { auditId, domain };
+    document.getElementById('del-domain-name').textContent = domain;
+    document.getElementById('del-confirm-input').value = '';
+    document.getElementById('del-modal').style.display = 'flex';
+    document.getElementById('del-confirm-input').focus();
+  }
+  function closeDeleteModal(){
+    document.getElementById('del-modal').style.display = 'none';
+    _pendingDelete = null;
+  }
+  async function confirmDelete(){
+    const typed = document.getElementById('del-confirm-input').value.trim();
+    if(typed !== 'DELETE'){
+      document.getElementById('del-error').style.display = 'block';
+      return;
+    }
+    const btn = document.getElementById('del-confirm-btn');
+    btn.textContent = 'Deleting…';
+    btn.disabled = true;
+    const res = await fetch("/api/admin/delete-publisher?audit_id="+encodeURIComponent(_pendingDelete.auditId)+"&pass="+encodeURIComponent("${ADMIN_PASSWORD}"), {method:"POST"});
+    const data = await res.json();
+    if(data.ok){
+      closeDeleteModal();
+      location.reload();
+    } else {
+      btn.textContent = 'Confirm Delete';
+      btn.disabled = false;
+      document.getElementById('del-error').textContent = 'Error: ' + (data.error || 'Unknown error');
+      document.getElementById('del-error').style.display = 'block';
+    }
+  }
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDeleteModal(); });
+  function exportSelectedCSV(){
+    const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb=>cb.getAttribute('data-aid'));
+    if(!ids.length) return alert("Select at least one property.");
+    const data = fullData.filter(r => ids.includes(r.audit_id));
+    let csv = "NetworkID,Domain,Sniffer,Vault,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\\n";
+    const markets = ['TollBit','Dappier','ProRata','Microsoft','Amazon'];
+    data.forEach(r => {
+      const fee = r.total_mkt_gross * 0.15;
+      csv += [r.pub_user_id, r.domain_name, r.total_bot_hits > 0 ? 'ACTIVE' : 'OFFLINE', r.vault_count || 0,
+              ...r.mktStats.map(m=>m.status), r.total_mkt_gross.toFixed(2), fee.toFixed(2), (r.total_mkt_gross-fee).toFixed(2)].join(',') + "\\n";
+    });
+    const b = new Blob([csv],{type:"text/csv"}), u = URL.createObjectURL(b), a = document.createElement("a");
+    a.href=u; a.download="BotRev_Fleet_"+new Date().toISOString().split('T')[0]+".csv"; a.click();
+  }
+</script>
+
+<!-- DELETE CONFIRMATION MODAL -->
+<div id="del-modal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(10,20,35,0.85); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px;">
+  <div style="background:#0d1f33; border:1px solid rgba(239,68,68,0.3); border-top:3px solid #EF4444; border-radius:14px; padding:36px; width:100%; max-width:420px; box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+    <div style="font-family:'DM Mono',monospace; font-size:0.58rem; letter-spacing:3px; text-transform:uppercase; color:#F87171; margin-bottom:10px;">⚠ Permanent Action</div>
+    <h3 style="font-size:1.1rem; font-weight:700; color:#fff; margin-bottom:8px;">Delete Publisher</h3>
+    <p style="font-size:0.87rem; color:#A8C5E8; line-height:1.6; margin-bottom:6px;">You are about to permanently delete:</p>
+    <div id="del-domain-name" style="font-family:'DM Mono',monospace; font-size:1rem; font-weight:500; color:#F87171; margin-bottom:16px; padding:10px 14px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px;"></div>
+    <p style="font-size:0.83rem; color:#A8C5E8; line-height:1.7; margin-bottom:20px;">This will erase the publisher account, all bot logs, all marketplace keys, and all vault objects. <strong style="color:#fff;">This cannot be undone.</strong></p>
+    <label style="font-family:'DM Mono',monospace; font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:#A8C5E8; display:block; margin-bottom:8px;">Type DELETE to confirm</label>
+    <input id="del-confirm-input" type="text" placeholder="DELETE" autocomplete="off"
+      style="width:100%; padding:11px 14px; background:#0a1622; border:1px solid rgba(239,68,68,0.3); border-radius:8px; color:#fff; font-family:'DM Mono',monospace; font-size:0.95rem; outline:none; margin-bottom:8px; letter-spacing:2px;"
+      oninput="document.getElementById('del-error').style.display='none'"
+      onkeydown="if(event.key==='Enter') confirmDelete()">
+    <div id="del-error" style="display:none; font-size:0.78rem; color:#F87171; margin-bottom:12px;">You must type DELETE exactly to proceed.</div>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button onclick="closeDeleteModal()" style="flex:1; padding:11px; background:rgba(168,197,232,0.08); color:#A8C5E8; border:1px solid rgba(168,197,232,0.2); border-radius:8px; cursor:pointer; font-weight:600; font-size:0.88rem;">Cancel</button>
+      <button id="del-confirm-btn" onclick="confirmDelete()" style="flex:1; padding:11px; background:#EF4444; color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:700; font-size:0.88rem;">Confirm Delete</button>
+    </div>
+  </div>
+</div>
+
+</body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 8. BOT SNIFFER API — /api/sniff
+    // ============================================================
+    if (path === "/api/sniff") {
+      const ua      = request.headers.get("User-Agent") || "Unknown";
+      const auditId = url.searchParams.get("audit_id") || "unknown";
+      const ref     = request.headers.get("Referer") || "";
+
+      const botClass = classifyBot(ua);
+      const stealth  = isStealthCrawler(request);
+
+      // COMPLIANCE FILTER: Never log clean human browsers.
+      // A "clean human" is a request that:
+      //   1. Has a recognizable human browser UA (Chrome, Safari, Firefox, Mozilla)
+      //   2. Does NOT trigger stealth crawler heuristics
+      //   3. Does NOT match any bot tier pattern
+      // This keeps us GDPR/CCPA compliant — bots are not natural persons,
+      // so bot logs are not "personal data" under either regulation.
+      // We never store IP addresses for the same reason.
+      const isCleanHuman = /mozilla|chrome|safari|firefox/i.test(ua)
+        && !stealth
+        && !botClass;
+
+      if (!isCleanHuman) {
+        // Option A: Log ALL non-human traffic.
+        // Confirmed bots get their detected tier; everything else is Tier 4 Utility.
+        const effectiveTier = botClass ? botClass.tier : 4;
+        const effectiveCPM  = botClass ? botClass.cpm : TIERS.TIER4;
+        const dampedCPM     = await getDampedCPM(auditId, effectiveCPM);
+        const isStealthFlag = (stealth && !botClass) ? 1 : 0;
+
+        await env.DB.prepare(
+          "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, referer) VALUES (?, ?, ?, ?, 1, ?, ?)"
+        ).bind(auditId, ua, effectiveTier, dampedCPM, isStealthFlag, ref).run();
+      }
+
+      return new Response("OK", {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    // ============================================================
+    // 9. VAULT API ENDPOINTS
+    // ============================================================
+
+    // Store content in Vault — POST /api/vault/store
+    if (path === "/api/vault/store" && request.method === "POST") {
+      const { audit_id, slug, html } = await request.json();
+      if (!audit_id || !slug || !html) return new Response("Missing fields", { status: 400 });
+      const result = await vaultStore(audit_id, slug, html);
+      return Response.json({ ok: true, ...result });
+    }
+
+    // Retrieve from Vault — GET /api/vault/get?audit_id=&slug=
+    if (path === "/api/vault/get") {
+      const auditId = url.searchParams.get("audit_id");
+      const slug    = url.searchParams.get("slug");
+      if (!auditId || !slug) return new Response("Missing params", { status: 400 });
+
+      const result = await vaultRetrieve(auditId, slug);
+      if (!result) return new Response("Not found", { status: 404 });
+
+      // Return as Markdown with BEO metadata headers
+      return new Response(result.content, {
+        headers: {
+          "Content-Type":         "text/markdown; charset=utf-8",
+          "X-BotRev-Hash":        result.meta.content_hash || "",
+          "X-BotRev-Vaulted":     result.meta.last_vaulted || "",
+          "X-BotRev-AuditID":     auditId,
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control":        "public, max-age=60",
+        },
+      });
+    }
+
+    // List Vault objects for a publisher — GET /api/vault/list?audit_id=
+    if (path === "/api/vault/list") {
+      const auditId = url.searchParams.get("audit_id");
+      if (!auditId) return new Response("Missing audit_id", { status: 400 });
+      const objects = await vaultList(auditId);
+      return Response.json({ ok: true, objects });
+    }
+
+    // Delete from Vault — DELETE /api/vault/delete?audit_id=&slug=
+    if (path === "/api/vault/delete" && request.method === "DELETE") {
+      const auditId = url.searchParams.get("audit_id");
+      const slug    = url.searchParams.get("slug");
+      if (!auditId || !slug) return new Response("Missing params", { status: 400 });
+      await env.VAULT.delete(`${auditId}/${slug}.md`);
+      await env.VAULT.delete(`${auditId}/${slug}.meta.json`);
+      await env.DB.prepare("DELETE FROM vault_objects WHERE audit_id = ? AND slug = ?").bind(auditId, slug).run();
+      return Response.json({ ok: true, deleted: slug });
+    }
+
+    // ============================================================
+    // 10. DOMAIN DRILLDOWN
+    // ============================================================
+    if (path === "/domain-drilldown") {
+      const aid   = url.searchParams.get("audit_id");
+      const r     = url.searchParams.get("range") || "all";
+      const dName = await getDomainName(aid);
+      const dF    = r === "7" ? "AND timestamp > datetime('now','-7 days')" : r === "30" ? "AND timestamp > datetime('now','-30 days')" : "";
+
+      const { results: bots } = await env.DB.prepare(
+        `SELECT bot_name, tier, COUNT(*) as c, SUM(cpm_value) as revenue FROM bot_logs WHERE audit_id = ? AND is_bot = 1 ${dF} GROUP BY bot_name ORDER BY revenue DESC`
+      ).bind(aid).all();
+
+      const { results: stealth } = await env.DB.prepare(
+        `SELECT COUNT(*) as cnt FROM bot_logs WHERE audit_id = ? AND is_stealth = 1 ${dF}`
+      ).bind(aid).all();
+
+      let totalRec = 0;
+      bots.forEach(b => totalRec += (b.revenue || 0));
+
+      const tierColors = { 1: "var(--green)", 2: "var(--blue)", 3: "var(--amber)", 4: "var(--muted)" };
+      const tierBadge  = { 1: "badge-t1", 2: "badge-t2", 3: "badge-t3", 4: "badge-t4" };
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>Domain Drilldown — ${dName}</title></head><body>
+<div class="wrap" style="padding-top:32px; padding-bottom:80px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
+    <button onclick="history.back()" class="btn btn-ghost btn-sm">← Back</button>
+    <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px;">Audit · ${dName}</div>
+    <div style="font-family:var(--font-mono); font-size:0.9rem; color:var(--green);">$${totalRec.toFixed(4)} recovered</div>
+  </div>
+
+  <div class="grid-3" style="margin-bottom:24px;">
+    <div class="card"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${bots.reduce((a,b)=>a+b.c,0).toLocaleString()}</div></div>
+    <div class="card"><div class="stat-label">Potential Recovery</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div></div>
+    <div class="card"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${stealth[0]?.cnt || 0}</div></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>Bot Agent</th><th>Tier</th><th>Hits</th><th style="text-align:right;">Est. Recovery</th></tr></thead>
+      <tbody>
+      ${bots.map(b => {
+        const t = b.tier || 4;
+        return `<tr>
+          <td><code>${(b.bot_name || "").substring(0, 80)}</code></td>
+          <td><span class="badge ${tierBadge[t]}">T${t}</span></td>
+          <td style="font-family:var(--font-mono);">${b.c.toLocaleString()}</td>
+          <td style="text-align:right; font-family:var(--font-mono); color:${tierColors[t]};">$${(b.revenue||0).toFixed(6)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 11. MARKETPLACE DRILLDOWN
+    // ============================================================
+    if (path === "/market-drilldown") {
+      const aid   = url.searchParams.get("audit_id");
+      const m     = url.searchParams.get("market");
+      const r     = url.searchParams.get("range") || "all";
+      const det   = await getMarketplaceDetails(aid, m, r);
+      const mColor = { TollBit: "var(--green)", Dappier: "var(--blue)", ProRata: "var(--amber)", Microsoft: "#00a4ef", Amazon: "#ff9900" }[m] || "var(--green)";
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
+<div class="wrap" style="padding-top:32px; padding-bottom:80px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
+    <button onclick="history.back()" class="btn btn-ghost btn-sm">← Back</button>
+    <div style="font-family:var(--font-mono); font-size:0.9rem; color:${mColor};">${m} NET: $${det.net.toFixed(4)}</div>
+  </div>
+  <div class="card" style="border-left: 3px solid ${mColor};">
+    <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:20px;">${m} · Breakdown</div>
+    <table>
+      <thead><tr><th>Agent</th><th>Requests</th><th style="text-align:right;">Net Revenue</th></tr></thead>
+      <tbody>
+      ${det.breakdown.length > 0
+        ? det.breakdown.map(b => `<tr><td><code>${b.name || b.bot}</code></td><td style="font-family:var(--font-mono);">${(b.count || b.hits || 0).toLocaleString()}</td><td style="text-align:right; font-family:var(--font-mono); color:${mColor};">$${((b.revenue||0)*(1-MANAGEMENT_FEE)).toFixed(6)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center; padding:40px; color:var(--muted);">No breakdown data available from API.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 12. ONBOARDING PAGE
+    // ============================================================
+    if (path === ONBOARDING_PATH) {
+      const pass = url.searchParams.get("pass");
+      if (pass !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+
+      if (request.method === "POST") {
+        try {
+          const formData = await request.formData();
+          const file     = formData.get("csv_file");
+          const content  = await file.text();
+          const lines    = content.split('\n').filter(l => l.trim() !== "");
+          let imported   = 0;
+
+          for (const line of lines) {
+            const parts = line.split(',').map(s => s.trim());
+            if (parts.length < 6) continue;
+            const [net, aid, dom, mkt, key, p, intType, origin] = parts;
+            const integType   = intType  || "A";
+            const originSvr   = origin   || null;
+            await env.DB.prepare("INSERT OR IGNORE INTO publisher_entities (pub_user_id, audit_id, domain_name, password, integration_type, origin_server) VALUES (?, ?, ?, ?, ?, ?)").bind(net.toLowerCase(), aid, dom, p, integType, originSvr).run();
+            await env.DB.prepare("INSERT OR IGNORE INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?)").bind(aid, mkt, key).run();
+            imported++;
+          }
+          return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + ADMIN_PASSWORD, 302);
+        } catch (e) {
+          return new Response("Error: " + e.message, { status: 500 });
+        }
+      }
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
+<div class="wrap" style="display:flex; justify-content:center; align-items:center; min-height:100vh;">
+  <div class="card" style="width:440px;">
+    <a class="logo" href="#">Bot<span>Rev</span></a>
+    <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; color:var(--muted); margin: 8px 0 24px; text-transform:uppercase;">Fleet Onboarding</div>
+    <p style="font-size:0.8rem; color:var(--muted); margin-bottom:20px; line-height:1.6;">
+      Upload a CSV. First 6 columns required, last 2 optional:<br>
+      <code>NetworkID, AuditID, Domain, Marketplace, APIKey, AccessKey, IntegrationType, OriginServer</code><br><br>
+      <b style="color:var(--text);">IntegrationType:</b> A (Cloudflare zone), B (CNAME Proxy), or C (JS Snippet). Defaults to A.<br>
+      <b style="color:var(--text);">OriginServer:</b> Required for Option B only. The publisher's real origin hostname (e.g. <code>mysite.wpengine.com</code>).
+    </p>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="csv_file" class="input" accept=".csv" required style="margin-bottom:12px;">
+      <button class="btn btn-primary" style="width:100%;">Execute Bulk Import</button>
+    </form>
+    <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost" style="width:100%; margin-top:10px; justify-content:center;">← Back to Fleet Command</a>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 13. MAIN PUBLISHER DASHBOARD
+    // ============================================================
+    if (path === "/dashboard") {
+      const eId    = (url.searchParams.get("entity") || "").toLowerCase();
+      const tab    = url.searchParams.get("tab") || "audit";
+      const range  = url.searchParams.get("range") || "all";
+      const isAdmin = url.searchParams.get("mode") === "admin";
+
+      const { results: domains } = await env.DB.prepare(
+        "SELECT * FROM publisher_entities WHERE LOWER(pub_user_id) = ?"
+      ).bind(eId).all();
+      if (domains.length === 0) return new Response("Access Denied", { status: 403 });
+
+      const dateFilter = range === "7" ? "AND timestamp > datetime('now','-7 days')" : range === "30" ? "AND timestamp > datetime('now','-30 days')" : "";
+      const filterBar  = `
+        <div style="display:flex; gap:8px; margin-bottom:32px;">
+          ${["7","30","all"].map(v => `<a href="?entity=${eId}&tab=${tab}&range=${v}" class="btn btn-ghost btn-sm ${range===v?'btn-primary':''}">${v==='all'?'All Time':v+' Days'}</a>`).join('')}
+        </div>`;
+
+      let tabContent = "";
+
+      // ---- AUDIT TAB ----
+      if (tab === "audit") {
+        const stats = await env.DB.prepare(
+          `SELECT SUM(CASE WHEN is_bot=1 THEN 1 ELSE 0 END) as tB, SUM(CASE WHEN is_stealth=1 THEN 1 ELSE 0 END) as tS, SUM(CASE WHEN is_bot=1 THEN cpm_value ELSE 0 END) as tRev FROM bot_logs WHERE audit_id IN (${domains.map(()=>'?').join(',')}) ${dateFilter}`
+        ).bind(...domains.map(d=>d.audit_id)).first();
+
+        const tierBreak = await env.DB.prepare(
+          `SELECT tier, COUNT(*) as c, SUM(cpm_value) as rev FROM bot_logs WHERE is_bot=1 ${dateFilter} AND audit_id IN (${domains.map(()=>'?').join(',')}) GROUP BY tier`
+        ).bind(...domains.map(d=>d.audit_id)).all();
+
+        const totalHits = stats?.tB || 0;
+        const tierData  = Object.fromEntries((tierBreak.results || []).map(r => [r.tier, r]));
+        const tierLabels = { 1: "Premium AI", 2: "Headless", 3: "Search", 4: "Utility" };
+
+        const domainCards = await Promise.all(domains.map(async d => {
+          const active = await env.DB.prepare("SELECT timestamp FROM bot_logs WHERE audit_id = ? AND is_bot = 1 LIMIT 1").bind(d.audit_id).first();
+          const vaultCount = await env.DB.prepare("SELECT COUNT(*) as cnt FROM vault_objects WHERE audit_id = ?").bind(d.audit_id).first();
+          const dnsLive = !!active;
+          const dnsStatusColor  = dnsLive ? 'var(--green)' : '#f59e0b';
+          const dnsStatusBorder = dnsLive ? 'var(--green)' : 'var(--border)';
+          const dnsStatusBg     = dnsLive ? 'rgba(0,229,160,0.05)' : 'transparent';
+          const dnsStatusLabel  = dnsLive ? 'DNS Active' : 'DNS Pending';
+          const dnsStatusDot    = dnsLive ? 'dot-green' : 'dot-gray';
+
+          return `
+          <div class="card ${dnsLive ? 'sniffer-live' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+              <div>
+                <div style="font-weight:700; font-size:1.05rem;">${d.domain_name}</div>
+                <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); margin-top:3px;">${d.audit_id}</div>
+                <div style="font-family:var(--font-mono); font-size:0.58rem; margin-top:5px; display:inline-block; padding:2px 8px; border-radius:10px; background:${d.integration_type==='B'?'rgba(59,126,200,0.1)':d.integration_type==='C'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${d.integration_type==='B'?'var(--blue)':d.integration_type==='C'?'#f59e0b':'var(--green)'};">Option ${d.integration_type||'A'}</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; border:1px solid ${dnsStatusBorder}; background:${dnsStatusBg};">
+                <span class="dot ${dnsStatusDot}"></span>
+                <span style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:${dnsStatusColor};">${dnsStatusLabel}</span>
+              </div>
+            </div>
+            ${!dnsLive ? `
+            <div style="background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.78rem; color:var(--muted); line-height:1.6;">
+              ${(d.integration_type||'A')==='A' ? `
+                <b style="color:var(--text);">Waiting for Worker route…</b> Add a Worker route in the publisher's Cloudflare zone:<br>
+                <span style="font-family:var(--font-mono); font-size:0.72rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; padding:4px 8px; display:inline-block; margin-top:6px; color:var(--green);">Route: *${d.domain_name}/* → ai-exchanger-sniffer</span>
+              ` : (d.integration_type==='B') ? `
+                <b style="color:var(--text);">Waiting for CNAME…</b> Ask your publisher to add this DNS record, then check back in 5–30 minutes:<br>
+                <span style="font-family:var(--font-mono); font-size:0.72rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; padding:4px 8px; display:inline-block; margin-top:6px; color:var(--green);">CNAME &nbsp; www &nbsp;→&nbsp; proxy.botrev.com &nbsp; TTL: 300</span>
+                ${!d.origin_server ? `<br><span style="color:#f87171; font-size:0.72rem;">⚠ No origin_server set — update in Fleet Command before traffic will route correctly.</span>` : ''}
+              ` : `
+                <b style="color:var(--text);">Waiting for snippet install…</b> Ask publisher to paste the JS snippet into their site header. Contact matt@botrev.com for the snippet code.
+              `}
+            </div>` : `
+            <div style="background:rgba(0,229,160,0.05); border:1px solid rgba(0,229,160,0.15); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.78rem; color:var(--muted); line-height:1.6;">
+              <b style="color:var(--green);">✓ Sniffer is live.</b> Bot traffic is being detected and logged via the publisher's CNAME record. No further action needed.
+            </div>`}
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <a href="/domain-drilldown?audit_id=${d.audit_id}&range=${range}" class="btn btn-primary btn-sm">View Audit Log →</a>
+              <div class="vault-bar">
+                <span class="dot" style="background:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};"></span>
+                <span style="font-family:var(--font-mono); font-size:0.65rem; color:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};">${vaultCount?.cnt||0} vault objects</span>
+              </div>
+            </div>
+          </div>`;
+        }));
+
+        tabContent = `
+          ${filterBar}
+          <div class="grid-3" style="margin-bottom:24px;">
+            <div class="card card-lit"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${totalHits.toLocaleString()}</div></div>
+            <div class="card card-lit"><div class="stat-label">Potential Recovery</div><div class="stat-val" style="color:var(--green);">$${(stats?.tRev||0).toFixed(4)}</div></div>
+            <div class="card card-lit"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${(stats?.tS||0).toLocaleString()}</div></div>
+          </div>
+          <div class="card" style="margin-bottom:24px;">
+            <div class="stat-label" style="margin-bottom:16px;">Tier Breakdown</div>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px;">
+              ${[1,2,3,4].map(t => {
+                const d = tierData[t] || { c: 0, rev: 0 };
+                const pct = totalHits > 0 ? (d.c / totalHits * 100) : 0;
+                const colors = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--amber)', 4: 'var(--muted)' };
+                return `<div>
+                  <div style="font-family:var(--font-mono); font-size:0.58rem; text-transform:uppercase; letter-spacing:1px; color:${colors[t]}; margin-bottom:4px;">T${t} · ${tierLabels[t]}</div>
+                  <div style="font-family:var(--font-mono); font-size:1.1rem; font-weight:500;">${d.c.toLocaleString()}</div>
+                  <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">$${(d.rev||0).toFixed(4)}</div>
+                  <div class="tier-bar"><div class="tier-fill" style="width:${pct.toFixed(1)}%; background:${colors[t]};"></div></div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+          ${domainCards.join('')}`;
+
+      // ---- VAULT TAB ----
+      } else if (tab === "vault") {
+        const vaultRows = await env.DB.prepare(
+          `SELECT * FROM vault_objects WHERE audit_id IN (${domains.map(()=>'?').join(',')}) ORDER BY last_vaulted DESC LIMIT 100`
+        ).bind(...domains.map(d=>d.audit_id)).all();
+
+        const totalChars = (vaultRows.results||[]).reduce((a,b)=>a+(b.char_count||0),0);
+
+        tabContent = `
+          ${filterBar}
+          <div class="grid-3" style="margin-bottom:24px;">
+            <div class="card"><div class="stat-label">Vault Objects</div><div class="stat-val" style="color:var(--blue);">${(vaultRows.results||[]).length}</div></div>
+            <div class="card"><div class="stat-label">Total Chars Stored</div><div class="stat-val">${totalChars.toLocaleString()}</div></div>
+            <div class="card"><div class="stat-label">Storage Est.</div><div class="stat-val">${(totalChars/1024).toFixed(1)} KB</div></div>
+          </div>
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div class="stat-label">Vaulted Content</div>
+              <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">Machine-Ready Markdown · BEO Optimized</div>
+            </div>
+            <table>
+              <thead><tr><th>Slug</th><th>Domain</th><th>Chars</th><th>Hash</th><th>Last Vaulted</th><th>Actions</th></tr></thead>
+              <tbody>
+              ${(vaultRows.results||[]).map(v => `
+                <tr>
+                  <td><code>${v.slug}</code></td>
+                  <td style="font-size:0.75rem; color:var(--muted);">${v.audit_id}</td>
+                  <td style="font-family:var(--font-mono); font-size:0.75rem;">${(v.char_count||0).toLocaleString()}</td>
+                  <td><code style="font-size:0.6rem;">${(v.content_hash||'').substring(0,12)}…</code></td>
+                  <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${v.last_vaulted?.replace('T',' ').substring(0,16) || '—'}</td>
+                  <td>
+                    <a href="/api/vault/get?audit_id=${v.audit_id}&slug=${v.slug}" target="_blank" class="btn btn-ghost btn-sm">View MD</a>
+                  </td>
+                </tr>`).join('')}
+              ${(vaultRows.results||[]).length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted);">No vault objects yet. Use the API to store content.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+          <div class="card" style="border-color:var(--border-lit);">
+            <div class="stat-label" style="margin-bottom:12px;">Manual Vault Store</div>
+            <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); margin-bottom:12px;">POST to <code>/api/vault/store</code></div>
+            <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px; font-family:var(--font-mono); font-size:0.72rem; color:var(--green); line-height:1.8;">
+              curl -X POST https://dash.botrev.com/api/vault/store \\<br>
+              &nbsp;&nbsp;-H "Content-Type: application/json" \\<br>
+              &nbsp;&nbsp;-d '{"audit_id":"${domains[0]?.audit_id||'YOUR_AUDIT_ID'}","slug":"article-slug","html":"&lt;article&gt;...&lt;/article&gt;"}' 
+            </div>
+          </div>`;
+
+      // ---- MARKETS TAB ----
+      } else if (tab === "market") {
+        const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+        const allMarketData = await Promise.all(domains.map(d =>
+          Promise.all(markets.map(m => getMarketplaceDetails(d.audit_id, m, range)))
+        ));
+        let gNet = 0;
+        allMarketData.forEach(dm => dm.forEach(m => { gNet += m.net; }));
+
+        const mktColors = { TollBit: "var(--green)", Dappier: "var(--blue)", ProRata: "var(--amber)", Microsoft: "#00a4ef", Amazon: "#ff9900" };
+
+        tabContent = `
+          ${filterBar}
+          <div class="card card-lit" style="max-width:380px; margin:0 0 28px; border:1px solid var(--green);">
+            <div class="stat-label">Total Network Net Revenue</div>
+            <div class="stat-val" style="color:var(--green); font-size:3rem;">$${gNet.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          </div>
+          ${(await Promise.all(domains.map(async (d, idx) => {
+            const stats = allMarketData[idx];
+            const domNet = stats.reduce((a,b)=>a+b.net,0);
+            return `<div class="card">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="font-weight:700;">${d.domain_name}</div>
+                <div style="text-align:right; font-family:var(--font-mono); font-size:0.8rem; color:var(--text);">$${domNet.toFixed(4)} net</div>
+              </div>
+              <div class="grid-3">
+              ${markets.map((m, i) => `
+                <div style="background:var(--bg); padding:16px; border-radius:10px; border:1px solid var(--border);">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-family:var(--font-mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:1px; color:${mktColors[m]};">${m}</span>
+                    <span class="badge badge-${stats[i].status==='Active'?'active':stats[i].status==='Offline'?'error':'warn'}">${stats[i].status}</span>
+                  </div>
+                  <div style="font-family:var(--font-mono); font-size:1.2rem; font-weight:500; color:var(--text);">$${stats[i].net.toFixed(4)}</div>
+                  <a href="/market-drilldown?audit_id=${d.audit_id}&market=${m}&range=${range}" style="font-family:var(--font-mono); font-size:0.6rem; color:${mktColors[m]}; text-decoration:none; display:block; margin-top:8px;">Analysis →</a>
+                </div>`).join('')}
+              </div>
+            </div>`;
+          }))).join('')}`;
+
+      // ---- RESOURCES TAB ----
+      } else if (tab === "faq") {
+        tabContent = `
+          <div style="max-width:780px;">
+            <div class="card card-lit" style="margin-bottom:16px;">
+              <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:16px;">Deployment Guide</div>
+              <ol style="padding-left:20px; font-size:0.85rem; line-height:2; color:var(--muted);">
+                <li>Sign your publisher's AOR agreement.</li>
+                <li>Add their domain to Fleet Command using the CSV import or the publisher onboarding flow.</li>
+                <li>Ask the publisher to add one DNS record to their domain:<br>
+                  <code style="font-size:0.8rem; background:rgba(0,229,160,0.07); border:1px solid var(--border); border-radius:4px; padding:3px 8px; display:inline-block; margin-top:4px;">CNAME &nbsp; botrev &nbsp;→&nbsp; sniffer.botrev.com &nbsp; TTL: 300</code>
+                </li>
+                <li>Status turns <span style="color:var(--green);">● DNS Active</span> once bot traffic is detected — usually within 30 minutes of DNS propagation.</li>
+                <li>No code, no plugins, no changes to the publisher's site. That's it.</li>
+              </ol>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; font-size:0.75rem; color:var(--muted);">
+                <div><b style="color:var(--text);">Already on Cloudflare?</b> Account manager adds the Worker route directly — no DNS record needed from publisher.</div>
+                <div><b style="color:var(--text);">DNS propagation slow?</b> Check status at dnschecker.org before troubleshooting.</div>
+                <div><b style="color:var(--text);">TTL:</b> Set to 300 (5 min) for faster propagation during onboarding.</div>
+                <div><b style="color:var(--text);">Root domain?</b> Some registrars require CNAME on a subdomain. Use botrev.yourdomain.com if root is unavailable.</div>
+              </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+              <div class="stat-label" style="margin-bottom:16px;">CPM Recovery Matrix</div>
+              <table>
+                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">CPM</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="badge badge-t1">T1</span></td><td style="font-weight:700;">Premium AI</td><td style="font-size:0.75rem; color:var(--muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td><td style="text-align:right; font-family:var(--font-mono); color:var(--green);">$20.00</td></tr>
+                  <tr><td><span class="badge badge-t2">T2</span></td><td style="font-weight:700;">Headless Scrapers</td><td style="font-size:0.75rem; color:var(--muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td><td style="text-align:right; font-family:var(--font-mono); color:var(--blue);">$10.00</td></tr>
+                  <tr><td><span class="badge badge-t3">T3</span></td><td style="font-weight:700;">Verified Search</td><td style="font-size:0.75rem; color:var(--muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td><td style="text-align:right; font-family:var(--font-mono); color:var(--amber);">$5.00</td></tr>
+                  <tr><td><span class="badge badge-t4">T4</span></td><td style="font-weight:700;">Utility Bots</td><td style="font-size:0.75rem; color:var(--muted);">General crawlers, scrapers, unidentified agents</td><td style="text-align:right; font-family:var(--font-mono); color:var(--muted);">$1.00</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="stat-label" style="margin-bottom:16px;">The Vault — How It Works</div>
+              <div style="font-size:0.85rem; color:var(--muted); line-height:1.9;">
+                BotRev converts your HTML pages into machine-optimized <b style="color:var(--text);">Clean Markdown</b> stored in a global R2 Vault. When a verified AI bot requests your content, it hits the Vault — not your origin server. This means:<br><br>
+                <b style="color:var(--text);">Origin Shielding:</b> Billions of bot requests never touch your database.<br>
+                <b style="color:var(--text);">Machine UX:</b> AI agents process Markdown 10× faster than HTML.<br>
+                <b style="color:var(--text);">Freshness Premiums:</b> TollBit pays more for content vaulted within 60 seconds of publication.<br>
+                <b style="color:var(--text);">BEO Metadata:</b> Invisible tags in every Vault object ensure your brand is cited in AI responses.
+              </div>
+            </div>
+          </div>`;
+
+      // ---- ACCOUNT TAB ----
+      } else if (tab === "account") {
+        tabContent = `
+          <div class="card" style="max-width:420px;">
+            <div class="stat-label" style="margin-bottom:20px;">Account Settings</div>
+            <label style="font-family:var(--font-mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted);">Network ID</label>
+            <input type="text" value="${eId.toUpperCase()}" class="input" readonly style="opacity:0.5; margin: 8px 0 16px;">
+            <label style="font-family:var(--font-mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted);">New Access Key</label>
+            <input type="password" id="nP" class="input" style="margin: 8px 0 20px;" placeholder="Enter new key…">
+            <button onclick="upAcc()" class="btn btn-primary" style="width:100%;">Save Key</button>
+          </div>
+          <script>async function upAcc(){ var p=document.getElementById('nP').value; if(!p) return; await fetch("/api/update-account?entity=${eId}&pass="+encodeURIComponent(p),{method:"POST"}); alert("Access key saved."); }</script>`;
+      }
+
+      const tabs = [
+        { id: "audit",  label: "Audit" },
+        { id: "vault",  label: "Vault" },
+        { id: "market", label: "Marketplaces" },
+        { id: "faq",    label: "Resources" },
+      ];
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>BotRev · ${eId.toUpperCase()}</title></head><body>
+<div class="top-bar">
+  <div class="top-bar-inner">
+    <div style="display:flex; align-items:center; gap:16px;">
+      <a class="logo" href="#">Bot<span>Rev</span></a>
+      <div style="width:1px; height:20px; background:rgba(168,197,232,0.2);"></div>
+      <div style="font-family:var(--font-mono); font-size:0.75rem; font-weight:500; letter-spacing:1px; color:#A8C5E8;">${eId.toUpperCase()}</div>
+      ${isAdmin ? '<span class="badge badge-error">Admin View</span>' : ''}
+    </div>
+    <div class="top-bar-right">
+      <a href="?entity=${eId}&tab=account" class="btn btn-ghost btn-sm">Account</a>
+      <a href="/login" class="btn btn-ghost btn-sm">Logout</a>
+    </div>
+  </div>
+</div>
+<div class="wrap" style="padding-top:32px; padding-bottom:80px;">
+
+  <div class="tab-nav">
+    ${tabs.map(t => `<a href="?entity=${eId}&tab=${t.id}&range=${range}" class="tab-link ${tab===t.id?'active':''}">${t.label}</a>`).join('')}
+  </div>
+
+  ${tabContent}
+</div>
+
+<script>
+// copySnip removed — sniffer runs via publisher CNAME record, no script installation needed
+</script>
+</body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 14. LOGIN
+    // ============================================================
+    if (path === "/login") {
+      if (request.method === "POST") {
+        const d = await request.formData();
+        const u = (d.get("user") || "").trim().toLowerCase();
+        const p = (d.get("pass") || "").trim();
+        if (p === ADMIN_PASSWORD) return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + p, 302);
+        const auth = await env.DB.prepare("SELECT pub_user_id FROM publisher_entities WHERE LOWER(pub_user_id) = ? AND password = ? LIMIT 1").bind(u, p).first();
+        if (auth) return Response.redirect(url.origin + "/dashboard?entity=" + auth.pub_user_id.toLowerCase(), 302);
+        return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
+<div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 50%, #1E3A5F 100%);">
+  <div class="card" style="width:360px; text-align:center; box-shadow: 0 20px 60px rgba(30,58,95,0.3);">
+    <a class="logo" href="#" style="font-size:1.6rem;">Bot<span>Rev</span></a>
+    <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--red); margin:12px 0;">Invalid credentials</div>
+    <form method="POST" style="text-align:left;">
+      <label class="stat-label">Network ID</label>
+      <input name="user" class="input" style="margin:6px 0 14px;" required>
+      <label class="stat-label">Access Key</label>
+      <input name="pass" type="password" class="input" style="margin:6px 0 20px;" required>
+      <button class="btn btn-primary" style="width:100%;">Sign In</button>
+    </form>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+      }
+
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
+<div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 50%, #1E3A5F 100%);">
+  <div class="card" style="width:360px; text-align:center; box-shadow: 0 20px 60px rgba(30,58,95,0.3);">
+    <a class="logo" href="#" style="font-size:1.6rem;">Bot<span>Rev</span></a>
+    <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:8px 0 24px;">Publisher Portal</div>
+    <form method="POST" style="text-align:left;">
+      <label class="stat-label">Network ID</label>
+      <input name="user" class="input" style="margin:6px 0 14px;" required>
+      <label class="stat-label">Access Key</label>
+      <input name="pass" type="password" class="input" style="margin:6px 0 20px;" required>
+      <button class="btn btn-primary" style="width:100%;">Sign In</button>
+    </form>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 15. MISC API
+    // ============================================================
+    if (path === "/api/update-account" && request.method === "POST") {
+      const eId = url.searchParams.get("entity");
+      const pa  = url.searchParams.get("pass");
+      await env.DB.prepare("UPDATE publisher_entities SET password = ? WHERE LOWER(pub_user_id) = ?").bind(pa, eId.toLowerCase()).run();
+      return new Response("OK");
+    }
+
+    // ============================================================
+    // 16. DELETE PUBLISHER — POST /api/admin/delete-publisher
+    // ============================================================
+    if (path === "/api/admin/delete-publisher" && request.method === "POST") {
+      const pass    = url.searchParams.get("pass");
+      const auditId = url.searchParams.get("audit_id");
+
+      if (pass !== ADMIN_PASSWORD) {
+        return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      }
+      if (!auditId) {
+        return Response.json({ ok: false, error: "Missing audit_id" }, { status: 400 });
+      }
+
+      try {
+        // 1. Purge all R2 Vault objects for this publisher
+        const vaultList = await env.VAULT.list({ prefix: `${auditId}/` });
+        await Promise.all(vaultList.objects.map(obj => env.VAULT.delete(obj.key)));
+
+        // 2. Delete from all D1 tables
+        await env.DB.prepare("DELETE FROM vault_objects         WHERE audit_id = ?").bind(auditId).run();
+        await env.DB.prepare("DELETE FROM bot_logs              WHERE audit_id = ?").bind(auditId).run();
+        await env.DB.prepare("DELETE FROM publisher_marketplaces WHERE audit_id = ?").bind(auditId).run();
+        await env.DB.prepare("DELETE FROM publisher_entities    WHERE audit_id = ?").bind(auditId).run();
+
+        return Response.json({ ok: true, deleted: auditId });
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+      }
+    }
+
+    return fetch(request);
+  },
+};
