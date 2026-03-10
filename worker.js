@@ -1,7 +1,7 @@
 /**
  * BotRev Cloudflare Worker — dash.botrev.com
  * Vault + Bot Sniffer | Full AOR Infrastructure
- * Version 16.0 — March 2026 — Remove debug endpoint, production clean
+ * Version 18.0 — March 2026 — Snippet button on all domain cards
  *
  * BINDINGS REQUIRED in wrangler.toml:
  *   [[d1_databases]]
@@ -50,9 +50,9 @@ export default {
 
     if (!isBotRevDomain) {
       // ── Look up publisher by domain ────────────────────────────
-      // Pulls audit_id, integration_type (A/B/C), and origin_server (Option B only)
+      // Pulls audit_id, integration_type (B/C), and origin_server (Standard/CNAME only)
       let publisherAuditId   = null;
-      let integrationType    = "A";
+      let integrationType    = "B";
       let publisherOrigin    = null;
 
       try {
@@ -61,7 +61,7 @@ export default {
           .bind(hostname)
           .first();
         publisherAuditId = pub?.audit_id       || null;
-        integrationType  = pub?.integration_type || "A";
+        integrationType  = pub?.integration_type || "B";
         publisherOrigin  = pub?.origin_server   || null;
       } catch (e) {
         // DB lookup failed — still pass traffic through, just don't log
@@ -93,15 +93,11 @@ export default {
       }
 
       // ── Pass request through to publisher origin ───────────────
-      // Option A: Worker route on publisher's own Cloudflare zone.
-      //   → fetch(originalURL) works fine — Worker runs on their zone,
-      //     Cloudflare resolves to their real origin server.
-      //
-      // Option B: Cloudflare for SaaS. Publisher's www CNAMEs to proxy.botrev.com.
+      // Standard (B): Cloudflare for SaaS. Publisher's www CNAMEs to proxy.botrev.com.
       //   → MUST rewrite the URL to their stored origin_server.
       //     Fetching the original URL here would re-enter BotRev's zone → infinite loop.
       //
-      // Option C: JS snippet. Never hits this intercept block (snippet calls /api/sniff directly).
+      // Snippet (C): JS snippet. Never hits this intercept block (snippet calls /api/sniff directly).
 
       try {
         let fetchURL = request.url;
@@ -167,7 +163,7 @@ export default {
 
         return originResponse;
       } catch (e) {
-        return new Response("BotRev: Origin unreachable — check origin_server config in Fleet Command", { status: 502 });
+        return new Response("BotRev: Origin unreachable — check origin_server config in Fleet Command (Standard integration)", { status: 502 });
       }
     }
 
@@ -185,23 +181,31 @@ export default {
     function classifyBot(ua = "") {
       const l = ua.toLowerCase();
 
-      // TIER 1 — Premium AI Agents
+      // TIER 1 — Premium AI Agents (check BEFORE generic bot patterns)
       if (/gptbot|openai|chatgpt|gpt-?[45]|oai-searchbot|claudebot|claude-web|anthropic|applebot|perplexity|bytespider|ccbot|imagesift|gemini|google-extended|cohere|you\.com|phind|groq|amazonbot|diffbot|meta-externalagent|facebookexternalhit/.test(l)) {
         return { tier: 1, cpm: TIERS.TIER1, label: "Premium AI" };
       }
 
-      // TIER 2 — Advanced Headless / Automation
-      if (/headlesschrome|headless|puppeteer|selenium|playwright|phantomjs|webdriver|chrome-lighthouse|scrapy|wget|curl|python-requests|axios|go-http-client/.test(l)) {
+      // TIER 2 — Advanced Headless / Automation (check BEFORE generic bot)
+      // Match full token "headlesschrome" or standalone "headless" keyword
+      if (/headlesschrome|puppeteer|selenium|playwright|phantomjs|webdriver|chrome-lighthouse|scrapy|python-requests|axios|go-http-client/.test(l) ||
+          /headless/.test(l)) {
         return { tier: 2, cpm: TIERS.TIER2, label: "Headless Scraper" };
       }
 
-      // TIER 3 — Verified Search Engines
-      if (/googlebot|bingbot|duckduckbot|slurp|baidu|yandex|sogou|exabot/.test(l)) {
+      // TIER 3 — Verified Search Engines (check BEFORE generic bot)
+      // Use word-boundary style match to catch Mozilla-wrapped UAs like
+      // "Mozilla/5.0 (compatible; Googlebot/2.1; ...)"
+      if (/googlebot|bingbot|duckduckbot|yahoo! slurp|baiduspider|yandexbot|sogou|exabot/.test(l)) {
         return { tier: 3, cpm: TIERS.TIER3, label: "Verified Search" };
       }
 
-      // Generic bot detection (Tier 4)
-      if (/bot|crawler|spider|scraper|monitor|fetch|scan|archive|feed|rss|http|java|ruby|php/.test(l)) {
+      // TIER 4 — Generic bot detection
+      // Exclude common false positives: full browser UAs that contain "http" in
+      // a URL (e.g. Googlebot's info URL), or "compatible" desktop UA strings.
+      // Only flag as bot if the UA isn't a full Mozilla browser string.
+      const isFullBrowserUA = /^mozilla\/5\.0/.test(l) && /applewebkit|gecko\/\d|trident/.test(l);
+      if (!isFullBrowserUA && /bot|crawler|spider|scraper|monitor|fetch|scan|archive|feed|rss|wget|curl|java|ruby|php/.test(l)) {
         return { tier: 4, cpm: TIERS.TIER4, label: "Utility Bot" };
       }
 
@@ -613,6 +617,7 @@ export default {
           <td>
             <div style="font-weight:700;">${r.domain_name}</div>
             <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${r.pub_user_id}</div>
+            <div style="font-family:var(--font-mono); font-size:0.55rem; margin-top:4px; display:inline-block; padding:1px 7px; border-radius:8px; background:${r.integration_type==='C'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${r.integration_type==='C'?'#f59e0b':'var(--green)'};">${r.integration_type==='C'?'Snippet':'Standard'}</div>
           </td>
           <td>
             <div style="display:flex; align-items:center; gap:6px;">
@@ -629,10 +634,15 @@ export default {
           <td><div style="display:flex; gap:4px;">${r.mktStats.map((m,i)=>`<span class="badge badge-${m.status==='Active'?'active':'error'}">${markets[i][0]}</span>`).join('')}</div></td>
           <td><span style="font-family:var(--font-mono); font-weight:500; color:var(--green);">$${r.total_mkt_gross.toFixed(2)}</span></td>
           <td>
-            <div style="display:flex; gap:6px;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button onclick="window.location.href='/dashboard?entity=${r.pub_user_id}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
               <button onclick="resetPass('${r.pub_user_id}')" class="btn btn-ghost btn-sm">Key</button>
+              <button onclick="var p=document.getElementById('snip-panel-${r.audit_id}');p.style.display=p.style.display==='none'?'block':'none'" class="btn btn-ghost btn-sm" style="font-size:0.65rem;">&lt;/&gt;</button>
               <button onclick="deletePublisher('${r.audit_id}','${r.domain_name}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
+            </div>
+            <div id="snip-panel-${r.audit_id}" style="display:none; margin-top:8px; position:relative; min-width:320px;">
+              <pre id="snip-code-${r.audit_id}" style="font-family:var(--font-mono); font-size:0.6rem; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:6px; padding:10px 50px 10px 12px; color:#a8c5e8; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin:0;">&lt;script&gt;(function(){var u="https://dash.botrev.com/api/sniff?audit_id=${encodeURIComponent(r.audit_id)}";if(navigator.sendBeacon){navigator.sendBeacon(u)}else{fetch(u,{mode:"no-cors",keepalive:true})}})();&lt;/script&gt;</pre>
+              <button onclick="navigator.clipboard.writeText(document.getElementById('snip-code-${r.audit_id}').innerText).then(function(){var b=document.getElementById('snip-copy-${r.audit_id}');b.textContent='✓';b.style.color='var(--green)';setTimeout(function(){b.textContent='Copy';b.style.color='';},2000)})" id="snip-copy-${r.audit_id}" style="position:absolute; top:6px; right:6px; font-family:var(--font-mono); font-size:0.58rem; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--light-muted); cursor:pointer;">Copy</button>
             </div>
           </td>
         </tr>`;
@@ -720,6 +730,43 @@ export default {
 </div>
 
 </body></html>`, { headers: { "Content-Type": "text/html" } });
+    }
+
+    // ============================================================
+    // 8a. PUBLISHER GUIDE PDF — /resources/publisher-guide.pdf
+    // ============================================================
+    if (path === "/resources/publisher-guide.pdf") {
+      // Try multiple likely key names in case upload used default filename
+      const keyAttempts = [
+        "_system/publisher-guide.pdf",
+        "_system/BotRev_Publisher_Audit_Guide.pdf",
+        "_system/BotRev_Publisher_Audit_Guide.docx.pdf",
+        "_system/BotRev_Publisher_Audit_Guide (1).pdf",
+      ];
+      let obj = null;
+      for (const key of keyAttempts) {
+        obj = await env.VAULT.get(key);
+        if (obj) break;
+      }
+      if (!obj) {
+        return new Response("PDF not found in R2. Check /api/list-system for what keys exist.", { status: 404 });
+      }
+      return new Response(obj.body, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": "inline; filename=\"BotRev_Publisher_Audit_Guide.pdf\"",
+          "Cache-Control": "no-cache",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // Debug: list _system/ keys in R2
+    if (path === "/api/list-system") {
+      const listed = await env.VAULT.list({ prefix: "_system/" });
+      return new Response(JSON.stringify(listed.objects.map(o => o.key), null, 2), {
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     // ============================================================
@@ -861,7 +908,10 @@ export default {
       <thead><tr><th>Bot Agent</th><th>Tier</th><th>Hits</th><th style="text-align:right;">Est. Recovery</th></tr></thead>
       <tbody>
       ${bots.map(b => {
-        const t = b.tier || 4;
+        // Re-classify UA on the fly so old log entries with wrong stored tier
+        // automatically display the correct tier without needing a DB migration.
+        const reclassified = classifyBot(b.bot_name || "");
+        const t = reclassified ? reclassified.tier : (b.tier || 4);
         return `<tr>
           <td><code>${(b.bot_name || "").substring(0, 80)}</code></td>
           <td><span class="badge ${tierBadge[t]}">T${t}</span></td>
@@ -924,7 +974,7 @@ export default {
             const parts = line.split(',').map(s => s.trim());
             if (parts.length < 6) continue;
             const [net, aid, dom, mkt, key, p, intType, origin] = parts;
-            const integType   = intType  || "A";
+            const integType   = intType  || "B";
             const originSvr   = origin   || null;
             await env.DB.prepare("INSERT OR IGNORE INTO publisher_entities (pub_user_id, audit_id, domain_name, password, integration_type, origin_server) VALUES (?, ?, ?, ?, ?, ?)").bind(net.toLowerCase(), aid, dom, p, integType, originSvr).run();
             await env.DB.prepare("INSERT OR IGNORE INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?)").bind(aid, mkt, key).run();
@@ -944,7 +994,7 @@ export default {
     <p style="font-size:0.8rem; color:var(--muted); margin-bottom:20px; line-height:1.6;">
       Upload a CSV. First 6 columns required, last 2 optional:<br>
       <code>NetworkID, AuditID, Domain, Marketplace, APIKey, AccessKey, IntegrationType, OriginServer</code><br><br>
-      <b style="color:var(--text);">IntegrationType:</b> A (Cloudflare zone), B (CNAME Proxy), or C (JS Snippet). Defaults to A.<br>
+      <b style="color:var(--text);">IntegrationType:</b> B (Standard — CNAME Proxy) or C (Snippet — JS Tag). Defaults to B.<br>
       <b style="color:var(--text);">OriginServer:</b> Required for Option B only. The publisher's real origin hostname (e.g. <code>mysite.wpengine.com</code>).
     </p>
     <form method="POST" enctype="multipart/form-data">
@@ -1008,36 +1058,22 @@ export default {
               <div>
                 <div style="font-weight:700; font-size:1.05rem;">${d.domain_name}</div>
                 <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); margin-top:3px;">${d.audit_id}</div>
-                <div style="font-family:var(--font-mono); font-size:0.58rem; margin-top:5px; display:inline-block; padding:2px 8px; border-radius:10px; background:${d.integration_type==='B'?'rgba(59,126,200,0.1)':d.integration_type==='C'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${d.integration_type==='B'?'var(--blue)':d.integration_type==='C'?'#f59e0b':'var(--green)'};">Option ${d.integration_type||'A'}</div>
+                ${isAdmin ? `<div style="font-family:var(--font-mono); font-size:0.58rem; margin-top:5px; display:inline-block; padding:2px 8px; border-radius:10px; background:${d.integration_type==='C'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${d.integration_type==='C'?'#f59e0b':'var(--green)'};">${d.integration_type==='C'?'Snippet':'Standard'}</div>` : ''}
               </div>
               <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; border:1px solid ${dnsStatusBorder}; background:${dnsStatusBg};">
                 <span class="dot ${dnsStatusDot}"></span>
                 <span style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:${dnsStatusColor};">${dnsStatusLabel}</span>
               </div>
             </div>
-            ${!dnsLive ? `
-            <div style="background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.78rem; color:var(--muted); line-height:1.6;">
-              ${(d.integration_type||'A')==='A' ? `
-                <b style="color:var(--text);">Waiting for Worker route…</b> Add a Worker route in the publisher's Cloudflare zone:<br>
-                <span style="font-family:var(--font-mono); font-size:0.72rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; padding:4px 8px; display:inline-block; margin-top:6px; color:var(--green);">Route: *${d.domain_name}/* → ai-exchanger-sniffer</span>
-              ` : (d.integration_type==='B') ? `
-                <b style="color:var(--text);">Waiting for CNAME…</b> Ask your publisher to add this DNS record, then check back in 5–30 minutes:<br>
-                <span style="font-family:var(--font-mono); font-size:0.72rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; padding:4px 8px; display:inline-block; margin-top:6px; color:var(--green);">CNAME &nbsp; www &nbsp;→&nbsp; proxy.botrev.com &nbsp; TTL: 300</span>
-                ${!d.origin_server ? `<br><span style="color:#f87171; font-size:0.72rem;">⚠ No origin_server set — update in Fleet Command before traffic will route correctly.</span>` : ''}
-              ` : `
-                <b style="color:var(--text);">Waiting for snippet install…</b> Ask publisher to paste the JS snippet into their site header. Contact matt@botrev.com for the snippet code.
-              `}
-            </div>` : `
-            <div style="background:rgba(0,229,160,0.05); border:1px solid rgba(0,229,160,0.15); border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.78rem; color:var(--muted); line-height:1.6;">
-              <b style="color:var(--green);">✓ Sniffer is live.</b> Bot traffic is being detected and logged via the publisher's CNAME record. No further action needed.
-            </div>`}
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <a href="/domain-drilldown?audit_id=${d.audit_id}&range=${range}" class="btn btn-primary btn-sm">View Audit Log →</a>
+              ${isAdmin ? `` : ''}
               <div class="vault-bar">
                 <span class="dot" style="background:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};"></span>
                 <span style="font-family:var(--font-mono); font-size:0.65rem; color:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};">${vaultCount?.cnt||0} vault objects</span>
               </div>
             </div>
+            
           </div>`;
         }));
 
@@ -1158,21 +1194,38 @@ export default {
         tabContent = `
           <div style="max-width:780px;">
             <div class="card card-lit" style="margin-bottom:16px;">
-              <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:16px;">Deployment Guide</div>
-              <ol style="padding-left:20px; font-size:0.85rem; line-height:2; color:var(--muted);">
-                <li>Sign your publisher's AOR agreement.</li>
-                <li>Add their domain to Fleet Command using the CSV import or the publisher onboarding flow.</li>
-                <li>Ask the publisher to add one DNS record to their domain:<br>
-                  <code style="font-size:0.8rem; background:rgba(0,229,160,0.07); border:1px solid var(--border); border-radius:4px; padding:3px 8px; display:inline-block; margin-top:4px;">CNAME &nbsp; botrev &nbsp;→&nbsp; sniffer.botrev.com &nbsp; TTL: 300</code>
-                </li>
-                <li>Status turns <span style="color:var(--green);">● DNS Active</span> once bot traffic is detected — usually within 30 minutes of DNS propagation.</li>
-                <li>No code, no plugins, no changes to the publisher's site. That's it.</li>
-              </ol>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; font-size:0.75rem; color:var(--muted);">
-                <div><b style="color:var(--text);">Already on Cloudflare?</b> Account manager adds the Worker route directly — no DNS record needed from publisher.</div>
-                <div><b style="color:var(--text);">DNS propagation slow?</b> Check status at dnschecker.org before troubleshooting.</div>
-                <div><b style="color:var(--text);">TTL:</b> Set to 300 (5 min) for faster propagation during onboarding.</div>
-                <div><b style="color:var(--text);">Root domain?</b> Some registrars require CNAME on a subdomain. Use botrev.yourdomain.com if root is unavailable.</div>
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px;">
+                <div>
+                  <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Sniffer Deployment Guide</div>
+                  <div style="font-size:0.8rem; color:var(--muted); line-height:1.6; max-width:520px;">The complete publisher onboarding guide — covers all three integration methods, tier classification, stealth bot detection, dashboard walkthrough, and revenue structure. Send this to every new publisher before their first call.</div>
+                </div>
+                <a href="/resources/publisher-guide.pdf" target="_blank" rel="noopener" style="text-decoration:none; flex-shrink:0; margin-left:24px;">
+                  <button class="btn btn-primary btn-sm" style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Open PDF
+                  </button>
+                </a>
+              </div>
+              <div style="border-top:1px solid var(--border); padding-top:16px; margin-bottom:16px;">
+                <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:12px;">How We Deploy the Sniffer</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:0.78rem;">
+                  <div style="background:rgba(0,229,160,0.05); border:1px solid rgba(0,229,160,0.2); border-radius:8px; padding:14px;">
+                    <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--green); letter-spacing:1px; margin-bottom:8px;">STANDARD · DEFAULT</div>
+                    <div style="font-weight:700; color:var(--text); margin-bottom:6px;">CNAME Proxy</div>
+                    <div style="color:var(--muted); line-height:1.6; font-size:0.75rem;">Publisher adds one CNAME record pointing <code>www</code> to <code>proxy.botrev.com</code>. Works on any host — Cloudflare, Squarespace, Wix, WordPress, Namecheap, all of it. Full headless + stealth detection. <b style="color:var(--text);">This is the default for all new publishers.</b></div>
+                  </div>
+                  <div style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:14px;">
+                    <div style="font-family:var(--font-mono); font-size:0.6rem; color:#f59e0b; letter-spacing:1px; margin-bottom:8px;">SNIPPET · FALLBACK</div>
+                    <div style="font-weight:700; color:var(--text); margin-bottom:6px;">JS Tag</div>
+                    <div style="color:var(--muted); line-height:1.6; font-size:0.75rem;">Publisher pastes a single script tag in their site header. No DNS changes needed. Captures JS-executing bots (T1 AI crawlers) but misses headless scrapers. Best as a quick audit start — migrate to Standard once they're comfortable.</div>
+                  </div>
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:0.75rem; color:var(--muted);">
+                <div><b style="color:var(--text);">DNS Active status</b> appears once bot traffic is first detected — usually within 30 min of propagation.</div>
+                <div><b style="color:var(--text);">DNS propagation slow?</b> Check dnschecker.org before troubleshooting.</div>
+                <div><b style="color:var(--text);">TTL tip:</b> Set to 300 (5 min) during onboarding for faster propagation.</div>
+                <div><b style="color:var(--text);">AOR first:</b> Always get the AOR signed before adding a publisher to Fleet Command.</div>
               </div>
             </div>
             <div class="card" style="margin-bottom:16px;">
