@@ -1,7 +1,7 @@
 /**
  * BotRev Cloudflare Worker — dash.botrev.com
  * Vault + Bot Sniffer | Full AOR Infrastructure
- * Version 18.0 — March 2026 — Snippet button on all domain cards
+ * Version 19.0 — March 2026 — Standard/Snippet only, stale refs cleaned
  *
  * BINDINGS REQUIRED in wrangler.toml:
  *   [[d1_databases]]
@@ -793,7 +793,7 @@ export default {
         && !botClass;
 
       if (!isCleanHuman) {
-        // Option A: Log ALL non-human traffic.
+        // Log ALL non-human traffic.
         // Confirmed bots get their detected tier; everything else is Tier 4 Utility.
         const effectiveTier = botClass ? botClass.tier : 4;
         const effectiveCPM  = botClass ? botClass.cpm : TIERS.TIER4;
@@ -1197,7 +1197,6 @@ export default {
               <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px;">
                 <div>
                   <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Sniffer Deployment Guide</div>
-                  <div style="font-size:0.8rem; color:var(--muted); line-height:1.6; max-width:520px;">The complete publisher onboarding guide — covers all three integration methods, tier classification, stealth bot detection, dashboard walkthrough, and revenue structure. Send this to every new publisher before their first call.</div>
                 </div>
                 <a href="/resources/publisher-guide.pdf" target="_blank" rel="noopener" style="text-decoration:none; flex-shrink:0; margin-left:24px;">
                   <button class="btn btn-primary btn-sm" style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
@@ -1230,7 +1229,7 @@ export default {
             <div class="card" style="margin-bottom:16px;">
               <div class="stat-label" style="margin-bottom:16px;">CPM Recovery Matrix</div>
               <table>
-                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">CPM</th></tr></thead>
+                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">Est. CPM</th></tr></thead>
                 <tbody>
                   <tr><td><span class="badge badge-t1">T1</span></td><td style="font-weight:700;">Premium AI</td><td style="font-size:0.75rem; color:var(--muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td><td style="text-align:right; font-family:var(--font-mono); color:var(--green);">$20.00</td></tr>
                   <tr><td><span class="badge badge-t2">T2</span></td><td style="font-weight:700;">Headless Scrapers</td><td style="font-size:0.75rem; color:var(--muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td><td style="text-align:right; font-family:var(--font-mono); color:var(--blue);">$10.00</td></tr>
@@ -1243,9 +1242,9 @@ export default {
               <div class="stat-label" style="margin-bottom:16px;">The Vault — How It Works</div>
               <div style="font-size:0.85rem; color:var(--muted); line-height:1.9;">
                 BotRev converts your HTML pages into machine-optimized <b style="color:var(--text);">Clean Markdown</b> stored in a global R2 Vault. When a verified AI bot requests your content, it hits the Vault — not your origin server. This means:<br><br>
-                <b style="color:var(--text);">Origin Shielding:</b> Billions of bot requests never touch your database.<br>
+                <b style="color:var(--text);">Origin Shielding:</b> Bot requests never touch your database.<br>
                 <b style="color:var(--text);">Machine UX:</b> AI agents process Markdown 10× faster than HTML.<br>
-                <b style="color:var(--text);">Freshness Premiums:</b> TollBit pays more for content vaulted within 60 seconds of publication.<br>
+                <b style="color:var(--text);">Freshness Premiums:</b> Marketplaces pays more for content vaulted within 60 seconds of publication.<br>
                 <b style="color:var(--text);">BEO Metadata:</b> Invisible tags in every Vault object ensure your brand is cited in AI responses.
               </div>
             </div>
