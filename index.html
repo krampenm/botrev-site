@@ -63,6 +63,13 @@
       border-radius: 7px; letter-spacing: 0.5px; transition: all 0.15s;
     }
     .nav-cta:hover { background: var(--green-dim); }
+    .nav-portal {
+      color: var(--muted); text-decoration: none;
+      font-weight: 600; font-size: 0.82rem; padding: 8px 14px;
+      border-radius: 7px; border: 1px solid var(--border-lit);
+      letter-spacing: 0.5px; transition: all 0.15s;
+    }
+    .nav-portal:hover { color: var(--navy); border-color: var(--navy-mid); background: var(--surface-2); }
 
     /* ── HERO ─────────────────────────────────────────────── */
     .hero {
@@ -317,6 +324,7 @@
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
         <a class="nav-link" href="#model">Pricing</a>
+        <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
         <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
       </div>
     </div>
@@ -395,7 +403,6 @@
         <p class="hero-sub">AI bots hit your site tens of thousands of times a month. They're consuming your content, fueling their models, and paying you nothing. BotRev changes that — detection, routing, and monthly payouts managed end-to-end.</p>
         <div class="hero-actions">
           <a class="btn-hero-primary" href="#" onclick="openAuditForm(); return false;">→ Start Your Free 48-Hour Audit</a>
-          <a class="btn-hero-ghost" href="https://dash.botrev.com/login">Publisher Portal</a>
         </div>
       </div>
       <div class="hero-card">
@@ -516,7 +523,7 @@
                 <th>Tier</th>
                 <th>Bot Class</th>
                 <th>Example Agents</th>
-                <th style="text-align:right;">Est. CPM Rate</th>
+                <th style="text-align:right;">CPM Rate</th>
               </tr>
             </thead>
             <tbody>
