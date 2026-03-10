@@ -1225,7 +1225,6 @@ export default {
                 <div><b style="color:var(--text);">DNS Active status</b> appears once bot traffic is first detected — usually within 30 min of propagation.</div>
                 <div><b style="color:var(--text);">DNS propagation slow?</b> Check dnschecker.org before troubleshooting.</div>
                 <div><b style="color:var(--text);">TTL tip:</b> Set to 300 (5 min) during onboarding for faster propagation.</div>
-                <div><b style="color:var(--text);">AOR first:</b> Always get the AOR signed before adding a publisher to Fleet Command.</div>
               </div>
             </div>
             <div class="card" style="margin-bottom:16px;">
