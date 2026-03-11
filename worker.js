@@ -1,17 +1,13 @@
 /**
  * BotRev Cloudflare Worker — dash.botrev.com
- * Vault + Bot Sniffer | Full AOR Infrastructure
- * Version 19.0 — March 2026 — Standard/Snippet only, stale refs cleaned
+ * Bot Sniffer | Full AOR Infrastructure
+ * Version 22.1 — March 2026 — Vault remnants fully purged, 1101 fix
  *
  * BINDINGS REQUIRED in wrangler.toml:
  *   [[d1_databases]]
  *   binding = "DB"
  *   database_name = "botrev-db"
  *   database_id = "<YOUR_D1_ID>"
- *
- *   [[r2_buckets]]
- *   binding = "VAULT"
- *   bucket_name = "botrev-vault"
  */
 
 export default {
@@ -254,90 +250,8 @@ export default {
     }
 
     // ============================================================
-    // 4. VAULT OPERATIONS (R2)
+    // 4. UTILITY HELPERS
     // ============================================================
-    async function vaultStore(auditId, slug, html) {
-      const markdown = htmlToMarkdown(html);
-      const hash     = await sha256(markdown);
-      const meta = {
-        audit_id:       auditId,
-        slug,
-        last_vaulted:   new Date().toISOString(),
-        content_hash:   hash,
-        char_count:     markdown.length,
-        freshness_flag: true,
-      };
-
-      const key = `${auditId}/${slug}.md`;
-      const metaKey = `${auditId}/${slug}.meta.json`;
-
-      await env.VAULT.put(key, markdown, {
-        httpMetadata: { contentType: "text/markdown" },
-        customMetadata: { audit_id: auditId, slug, hash },
-      });
-      await env.VAULT.put(metaKey, JSON.stringify(meta), {
-        httpMetadata: { contentType: "application/json" },
-      });
-
-      // Log the vault event in D1
-      await env.DB
-        .prepare("INSERT INTO vault_objects (audit_id, slug, content_hash, char_count, last_vaulted) VALUES (?, ?, ?, ?, datetime('now')) ON CONFLICT(audit_id, slug) DO UPDATE SET content_hash=excluded.content_hash, char_count=excluded.char_count, last_vaulted=excluded.last_vaulted")
-        .bind(auditId, slug, hash, markdown.length)
-        .run();
-
-      return { key, hash, char_count: markdown.length };
-    }
-
-    async function vaultRetrieve(auditId, slug) {
-      const key     = `${auditId}/${slug}.md`;
-      const metaKey = `${auditId}/${slug}.meta.json`;
-
-      const [obj, metaObj] = await Promise.all([
-        env.VAULT.get(key),
-        env.VAULT.get(metaKey),
-      ]);
-
-      if (!obj) return null;
-
-      const content = await obj.text();
-      const meta    = metaObj ? JSON.parse(await metaObj.text()) : {};
-      return { content, meta };
-    }
-
-    async function vaultList(auditId) {
-      const listed = await env.VAULT.list({ prefix: `${auditId}/` });
-      return listed.objects
-        .filter(o => o.key.endsWith('.md'))
-        .map(o => ({
-          key:   o.key,
-          slug:  o.key.replace(`${auditId}/`, '').replace('.md', ''),
-          size:  o.size,
-          etag:  o.etag,
-        }));
-    }
-
-    // ============================================================
-    // 5. UTILITY HELPERS
-    // ============================================================
-    function htmlToMarkdown(html) {
-      // Strip all HTML tags, convert headings, preserve links as text
-      return html
-        .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, (_, t) => `## ${t.replace(/<[^>]+>/g, '')}\n\n`)
-        .replace(/<p[^>]*>(.*?)<\/p>/gis, (_, t) => `${t.replace(/<[^>]+>/g, '')}\n\n`)
-        .replace(/<li[^>]*>(.*?)<\/li>/gi, (_, t) => `- ${t.replace(/<[^>]+>/g, '')}\n`)
-        .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, (_, href, text) => `[${text.replace(/<[^>]+>/g, '')}](${href})`)
-        .replace(/<[^>]+>/g, '')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-    }
-
-    async function sha256(text) {
-      const buf  = new TextEncoder().encode(text);
-      const hash = await crypto.subtle.digest("SHA-256", buf);
-      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
     async function getDomainName(aid) {
       const res = await env.DB.prepare("SELECT domain_name FROM publisher_entities WHERE audit_id = ? LIMIT 1").bind(aid).first();
       return res ? res.domain_name : aid;
@@ -382,7 +296,7 @@ export default {
     }
 
     // ============================================================
-    // 6. SHARED BRAND CSS
+    // 5. SHARED BRAND CSS
     // ============================================================
     const brandHead = `
 <meta charset="UTF-8">
@@ -501,11 +415,6 @@ export default {
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
   @media(max-width: 768px) { .grid-3,.grid-4 { grid-template-columns: 1fr 1fr; } .grid-2 { grid-template-columns: 1fr; } }
 
-  /* Vault pill */
-  .vault-bar { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono);
-               font-size: 0.7rem; color: var(--muted); background: var(--bg);
-               border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; }
-  .vault-bar .dot-green { animation: none; background: var(--green); }
 
   /* Sniffer wave */
   .sniffer-live { position: relative; overflow: hidden; }
@@ -528,7 +437,7 @@ export default {
 </style>`;
 
     // ============================================================
-    // 7. ADMIN FLEET COMMAND
+    // 6. ADMIN FLEET COMMAND
     // ============================================================
     if (path.startsWith(SECRET_ADMIN_PATH)) {
       const pass = url.searchParams.get("pass");
@@ -537,8 +446,7 @@ export default {
       const { results } = await env.DB.prepare(`
         SELECT pe.*,
           (SELECT COUNT(*) FROM bot_logs WHERE audit_id = pe.audit_id AND is_bot = 1) as total_bot_hits,
-          (SELECT COUNT(*) FROM bot_logs WHERE audit_id = pe.audit_id AND is_bot = 1 AND timestamp > datetime('now','-1 day')) as recent_bot_hits,
-          (SELECT COUNT(*) FROM vault_objects WHERE audit_id = pe.audit_id) as vault_count
+          (SELECT COUNT(*) FROM bot_logs WHERE audit_id = pe.audit_id AND is_bot = 1 AND timestamp > datetime('now','-1 day')) as recent_bot_hits
         FROM publisher_entities pe
       `).all();
 
@@ -550,7 +458,6 @@ export default {
 
       const fleetGross = fullList.reduce((sum, r) => sum + r.total_mkt_gross, 0);
       const totalBots  = results.reduce((sum, r) => sum + (r.total_bot_hits || 0), 0);
-      const totalVault = results.reduce((sum, r) => sum + (r.vault_count || 0), 0);
 
       return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>Fleet Command — BotRev</title></head><body>
 <div class="top-bar">
@@ -568,7 +475,7 @@ export default {
 <div class="wrap" style="padding-top:32px; padding-bottom:80px;">
 
   <!-- Fleet Stats -->
-  <div class="grid-4" style="margin-bottom:32px;">
+  <div class="grid-3" style="margin-bottom:32px;">
     <div class="card card-lit sniffer-live">
       <div class="stat-label">Fleet Gross Revenue</div>
       <div class="stat-val" style="color:var(--green);">$${fleetGross.toFixed(2)}</div>
@@ -581,10 +488,6 @@ export default {
     <div class="card">
       <div class="stat-label">Active Properties</div>
       <div class="stat-val">${fullList.length}</div>
-    </div>
-    <div class="card">
-      <div class="stat-label">Vault Objects</div>
-      <div class="stat-val" style="color:var(--blue);">${totalVault.toLocaleString()}</div>
     </div>
   </div>
 
@@ -599,8 +502,7 @@ export default {
         <th style="width:30px;"><input type="checkbox" id="masterCb" onclick="toggleAll(this)" style="accent-color:var(--green);"></th>
         <th>Property</th>
         <th>Sniffer</th>
-        <th>Vault</th>
-        <th>API Sync</th>
+        <th>Marketplaces</th>
         <th>Gross Rev.</th>
         <th>Actions</th>
       </tr></thead>
@@ -625,18 +527,12 @@ export default {
               <span style="font-family:var(--font-mono); font-size:0.6rem; color:${snColor}; letter-spacing:1px;">${snLabel}</span>
             </div>
           </td>
-          <td>
-            <div class="vault-bar">
-              <span class="dot" style="background:${r.vault_count > 0 ? 'var(--blue)' : 'var(--muted)'};"></span>
-              <span style="color:${r.vault_count > 0 ? 'var(--blue)' : 'var(--muted)'};">${r.vault_count || 0} objects</span>
-            </div>
-          </td>
           <td><div style="display:flex; gap:4px;">${r.mktStats.map((m,i)=>`<span class="badge badge-${m.status==='Active'?'active':'error'}">${markets[i][0]}</span>`).join('')}</div></td>
           <td><span style="font-family:var(--font-mono); font-weight:500; color:var(--green);">$${r.total_mkt_gross.toFixed(2)}</span></td>
           <td>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button onclick="window.location.href='/dashboard?entity=${r.pub_user_id}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
-              <button onclick="resetPass('${r.pub_user_id}')" class="btn btn-ghost btn-sm">Key</button>
+              <button onclick="openEditModal('${r.audit_id}')" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green);">Edit</button>
               <button onclick="var p=document.getElementById('snip-panel-${r.audit_id}');p.style.display=p.style.display==='none'?'block':'none'" class="btn btn-ghost btn-sm" style="font-size:0.65rem;">&lt;/&gt;</button>
               <button onclick="deletePublisher('${r.audit_id}','${r.domain_name}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
             </div>
@@ -656,8 +552,100 @@ export default {
   const fullData = ${JSON.stringify(fullList)};
   function toggleAll(m){ document.querySelectorAll('.row-cb').forEach(c => { if(c.closest('tr').style.display !== 'none') c.checked = m.checked; }); }
   function filterTable(){ var v = document.getElementById("netSearch").value.toUpperCase(); document.querySelectorAll(".net-row").forEach(r => { r.style.display = r.innerText.toUpperCase().includes(v) ? "" : "none"; }); }
-  async function resetPass(u){ var n = prompt("New Access Key for "+u+":"); if(n){ await fetch("/api/update-account?entity="+u+"&pass="+encodeURIComponent(n),{method:"POST"}); alert("Key updated."); } }
 
+  // ── EDIT MODAL ──────────────────────────────────────────────────
+  let _editAuditId = null;
+
+  async function openEditModal(auditId) {
+    _editAuditId = auditId;
+    document.getElementById('edit-modal').style.display = 'flex';
+    document.getElementById('edit-save-btn').textContent = 'Save Changes';
+    document.getElementById('edit-save-btn').disabled = false;
+    document.getElementById('edit-msg').style.display = 'none';
+
+    // Clear fields while loading
+    ['edit-network-id','edit-audit-id','edit-domain','edit-email','edit-password',
+     'edit-integration','edit-origin','edit-key-tollbit','edit-key-dappier',
+     'edit-key-prorata','edit-key-microsoft','edit-key-amazon'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+    document.getElementById('edit-loading').style.display = 'block';
+    document.getElementById('edit-form-body').style.display = 'none';
+
+    const res = await fetch("/api/admin/publisher-detail?audit_id="+encodeURIComponent(auditId)+"&pass="+encodeURIComponent("${ADMIN_PASSWORD}"));
+    const data = await res.json();
+
+    document.getElementById('edit-loading').style.display = 'none';
+    document.getElementById('edit-form-body').style.display = 'block';
+
+    if(!data.ok){ document.getElementById('edit-msg').textContent = 'Error loading publisher.'; document.getElementById('edit-msg').style.display='block'; return; }
+
+    const p = data.publisher;
+    document.getElementById('edit-network-id').value   = p.pub_user_id || '';
+    document.getElementById('edit-audit-id').value     = p.audit_id || '';
+    document.getElementById('edit-domain').value       = p.domain_name || '';
+    document.getElementById('edit-email').value        = p.email || '';
+    document.getElementById('edit-password').value     = p.password || '';
+    document.getElementById('edit-integration').value  = p.integration_type || 'B';
+    document.getElementById('edit-origin').value       = p.origin_server || '';
+    document.getElementById('edit-key-tollbit').value  = data.keys['TollBit'] || '';
+    document.getElementById('edit-key-dappier').value  = data.keys['Dappier'] || '';
+    document.getElementById('edit-key-prorata').value  = data.keys['ProRata'] || '';
+    document.getElementById('edit-key-microsoft').value= data.keys['Microsoft'] || '';
+    document.getElementById('edit-key-amazon').value   = data.keys['Amazon'] || '';
+  }
+
+  function closeEditModal(){
+    document.getElementById('edit-modal').style.display = 'none';
+    _editAuditId = null;
+  }
+
+  async function saveEdit(){
+    const btn = document.getElementById('edit-save-btn');
+    btn.textContent = 'Saving…';
+    btn.disabled = true;
+
+    const payload = {
+      original_audit_id: _editAuditId,
+      pub_user_id:      document.getElementById('edit-network-id').value.trim().toLowerCase(),
+      audit_id:         document.getElementById('edit-audit-id').value.trim(),
+      domain_name:      document.getElementById('edit-domain').value.trim(),
+      email:            document.getElementById('edit-email').value.trim(),
+      password:         document.getElementById('edit-password').value.trim(),
+      integration_type: document.getElementById('edit-integration').value.trim(),
+      origin_server:    document.getElementById('edit-origin').value.trim() || null,
+      keys: {
+        TollBit:   document.getElementById('edit-key-tollbit').value.trim(),
+        Dappier:   document.getElementById('edit-key-dappier').value.trim(),
+        ProRata:   document.getElementById('edit-key-prorata').value.trim(),
+        Microsoft: document.getElementById('edit-key-microsoft').value.trim(),
+        Amazon:    document.getElementById('edit-key-amazon').value.trim(),
+      }
+    };
+
+    const res = await fetch("/api/admin/update-publisher?pass="+encodeURIComponent("${ADMIN_PASSWORD}"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    const msg = document.getElementById('edit-msg');
+    if(data.ok){
+      msg.style.color = 'var(--green)';
+      msg.textContent = '✓ Saved successfully. Reloading…';
+      msg.style.display = 'block';
+      setTimeout(() => { closeEditModal(); location.reload(); }, 1200);
+    } else {
+      msg.style.color = '#F87171';
+      msg.textContent = 'Error: ' + (data.error || 'Unknown error');
+      msg.style.display = 'block';
+      btn.textContent = 'Save Changes';
+      btn.disabled = false;
+    }
+  }
+
+  // ── DELETE MODAL ────────────────────────────────────────────────
   let _pendingDelete = null;
   function deletePublisher(auditId, domain){
     _pendingDelete = { auditId, domain };
@@ -691,16 +679,18 @@ export default {
       document.getElementById('del-error').style.display = 'block';
     }
   }
-  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDeleteModal(); });
+
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ closeDeleteModal(); closeEditModal(); } });
+
   function exportSelectedCSV(){
     const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb=>cb.getAttribute('data-aid'));
     if(!ids.length) return alert("Select at least one property.");
     const data = fullData.filter(r => ids.includes(r.audit_id));
-    let csv = "NetworkID,Domain,Sniffer,Vault,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\\n";
+    let csv = "NetworkID,Domain,Sniffer,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\\n";
     const markets = ['TollBit','Dappier','ProRata','Microsoft','Amazon'];
     data.forEach(r => {
       const fee = r.total_mkt_gross * 0.15;
-      csv += [r.pub_user_id, r.domain_name, r.total_bot_hits > 0 ? 'ACTIVE' : 'OFFLINE', r.vault_count || 0,
+      csv += [r.pub_user_id, r.domain_name, r.total_bot_hits > 0 ? 'ACTIVE' : 'OFFLINE',
               ...r.mktStats.map(m=>m.status), r.total_mkt_gross.toFixed(2), fee.toFixed(2), (r.total_mkt_gross-fee).toFixed(2)].join(',') + "\\n";
     });
     const b = new Blob([csv],{type:"text/csv"}), u = URL.createObjectURL(b), a = document.createElement("a");
@@ -708,14 +698,109 @@ export default {
   }
 </script>
 
-<!-- DELETE CONFIRMATION MODAL -->
-<div id="del-modal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(10,20,35,0.85); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px;">
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- EDIT PUBLISHER MODAL                                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="edit-modal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(10,20,35,0.88); backdrop-filter:blur(6px); justify-content:center; align-items:flex-start; padding:24px; overflow-y:auto;">
+  <div style="background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--green); border-radius:14px; padding:36px; width:100%; max-width:640px; margin:auto; box-shadow:0 32px 80px rgba(0,0,0,0.4);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:3px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Fleet Command</div>
+        <h3 style="font-size:1.1rem; font-weight:700; color:var(--text);">Edit Publisher</h3>
+      </div>
+      <button onclick="closeEditModal()" style="background:none; border:none; font-size:1.4rem; color:var(--muted); cursor:pointer; line-height:1;">×</button>
+    </div>
+
+    <div id="edit-loading" style="text-align:center; padding:32px; font-family:var(--font-mono); font-size:0.75rem; color:var(--muted);">Loading publisher data…</div>
+    <div id="edit-form-body" style="display:none;">
+
+      <!-- Publisher Info -->
+      <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--border);">Publisher Info</div>
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Network ID</label>
+          <input id="edit-network-id" class="input" placeholder="e.g. publisher01" autocomplete="off">
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Audit ID</label>
+          <input id="edit-audit-id" class="input" placeholder="e.g. Audit-001" autocomplete="off">
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Domain</label>
+        <input id="edit-domain" class="input" placeholder="e.g. techdigest.com" autocomplete="off">
+      </div>
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Email Contact</label>
+          <input id="edit-email" class="input" type="email" placeholder="publisher@domain.com" autocomplete="off">
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Access Key (Password)</label>
+          <input id="edit-password" class="input" type="text" placeholder="Access key" autocomplete="off">
+        </div>
+      </div>
+      <div class="grid-2" style="margin-bottom:24px;">
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Integration Type</label>
+          <select id="edit-integration" class="input" style="cursor:pointer;">
+            <option value="B">B — Standard (CNAME Proxy)</option>
+            <option value="C">C — Snippet (JS Tag)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Origin Server</label>
+          <input id="edit-origin" class="input" placeholder="e.g. 184.94.213.18 (Standard only)" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- Marketplace Keys -->
+      <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--border);">Marketplace API Keys</div>
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--green); display:block; margin-bottom:6px;">TollBit</label>
+          <input id="edit-key-tollbit" class="input" placeholder="API key" autocomplete="off">
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--blue); display:block; margin-bottom:6px;">Dappier</label>
+          <input id="edit-key-dappier" class="input" placeholder="API key" autocomplete="off">
+        </div>
+      </div>
+      <div class="grid-2" style="margin-bottom:14px;">
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--amber); display:block; margin-bottom:6px;">ProRata</label>
+          <input id="edit-key-prorata" class="input" placeholder="API key" autocomplete="off">
+        </div>
+        <div>
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:#00a4ef; display:block; margin-bottom:6px;">Microsoft</label>
+          <input id="edit-key-microsoft" class="input" placeholder="API key" autocomplete="off">
+        </div>
+      </div>
+      <div style="margin-bottom:24px;">
+        <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:#ff9900; display:block; margin-bottom:6px;">Amazon</label>
+        <input id="edit-key-amazon" class="input" placeholder="API key" autocomplete="off">
+      </div>
+
+      <div id="edit-msg" style="display:none; font-family:var(--font-mono); font-size:0.75rem; margin-bottom:14px; padding:10px 14px; border-radius:6px; background:var(--bg);"></div>
+
+      <div style="display:flex; gap:10px;">
+        <button onclick="closeEditModal()" style="flex:1; padding:11px; background:var(--bg); color:var(--muted); border:1px solid var(--border); border-radius:8px; cursor:pointer; font-weight:600; font-size:0.88rem;">Cancel</button>
+        <button id="edit-save-btn" onclick="saveEdit()" style="flex:2; padding:11px; background:var(--green); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:700; font-size:0.88rem;">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DELETE CONFIRMATION MODAL                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="del-modal" style="display:none; position:fixed; inset:0; z-index:1001; background:rgba(10,20,35,0.85); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px;">
   <div style="background:#0d1f33; border:1px solid rgba(239,68,68,0.3); border-top:3px solid #EF4444; border-radius:14px; padding:36px; width:100%; max-width:420px; box-shadow:0 32px 80px rgba(0,0,0,0.5);">
     <div style="font-family:'DM Mono',monospace; font-size:0.58rem; letter-spacing:3px; text-transform:uppercase; color:#F87171; margin-bottom:10px;">⚠ Permanent Action</div>
     <h3 style="font-size:1.1rem; font-weight:700; color:#fff; margin-bottom:8px;">Delete Publisher</h3>
     <p style="font-size:0.87rem; color:#A8C5E8; line-height:1.6; margin-bottom:6px;">You are about to permanently delete:</p>
     <div id="del-domain-name" style="font-family:'DM Mono',monospace; font-size:1rem; font-weight:500; color:#F87171; margin-bottom:16px; padding:10px 14px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px;"></div>
-    <p style="font-size:0.83rem; color:#A8C5E8; line-height:1.7; margin-bottom:20px;">This will erase the publisher account, all bot logs, all marketplace keys, and all vault objects. <strong style="color:#fff;">This cannot be undone.</strong></p>
+    <p style="font-size:0.83rem; color:#A8C5E8; line-height:1.7; margin-bottom:20px;">This will erase the publisher account, all bot logs, and all marketplace keys. <strong style="color:#fff;">This cannot be undone.</strong></p>
     <label style="font-family:'DM Mono',monospace; font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:#A8C5E8; display:block; margin-bottom:8px;">Type DELETE to confirm</label>
     <input id="del-confirm-input" type="text" placeholder="DELETE" autocomplete="off"
       style="width:100%; padding:11px 14px; background:#0a1622; border:1px solid rgba(239,68,68,0.3); border-radius:8px; color:#fff; font-family:'DM Mono',monospace; font-size:0.95rem; outline:none; margin-bottom:8px; letter-spacing:2px;"
@@ -733,44 +818,7 @@ export default {
     }
 
     // ============================================================
-    // 8a. PUBLISHER GUIDE PDF — /resources/publisher-guide.pdf
-    // ============================================================
-    if (path === "/resources/publisher-guide.pdf") {
-      // Try multiple likely key names in case upload used default filename
-      const keyAttempts = [
-        "_system/publisher-guide.pdf",
-        "_system/BotRev_Publisher_Audit_Guide.pdf",
-        "_system/BotRev_Publisher_Audit_Guide.docx.pdf",
-        "_system/BotRev_Publisher_Audit_Guide (1).pdf",
-      ];
-      let obj = null;
-      for (const key of keyAttempts) {
-        obj = await env.VAULT.get(key);
-        if (obj) break;
-      }
-      if (!obj) {
-        return new Response("PDF not found in R2. Check /api/list-system for what keys exist.", { status: 404 });
-      }
-      return new Response(obj.body, {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": "inline; filename=\"BotRev_Publisher_Audit_Guide.pdf\"",
-          "Cache-Control": "no-cache",
-          "Access-Control-Allow-Origin": "*",
-        },
-      });
-    }
-
-    // Debug: list _system/ keys in R2
-    if (path === "/api/list-system") {
-      const listed = await env.VAULT.list({ prefix: "_system/" });
-      return new Response(JSON.stringify(listed.objects.map(o => o.key), null, 2), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    // ============================================================
-    // 8. BOT SNIFFER API — /api/sniff
+    // 7. BOT SNIFFER API — /api/sniff
     // ============================================================
     if (path === "/api/sniff") {
       const ua      = request.headers.get("User-Agent") || "Unknown";
@@ -814,60 +862,7 @@ export default {
     }
 
     // ============================================================
-    // 9. VAULT API ENDPOINTS
-    // ============================================================
-
-    // Store content in Vault — POST /api/vault/store
-    if (path === "/api/vault/store" && request.method === "POST") {
-      const { audit_id, slug, html } = await request.json();
-      if (!audit_id || !slug || !html) return new Response("Missing fields", { status: 400 });
-      const result = await vaultStore(audit_id, slug, html);
-      return Response.json({ ok: true, ...result });
-    }
-
-    // Retrieve from Vault — GET /api/vault/get?audit_id=&slug=
-    if (path === "/api/vault/get") {
-      const auditId = url.searchParams.get("audit_id");
-      const slug    = url.searchParams.get("slug");
-      if (!auditId || !slug) return new Response("Missing params", { status: 400 });
-
-      const result = await vaultRetrieve(auditId, slug);
-      if (!result) return new Response("Not found", { status: 404 });
-
-      // Return as Markdown with BEO metadata headers
-      return new Response(result.content, {
-        headers: {
-          "Content-Type":         "text/markdown; charset=utf-8",
-          "X-BotRev-Hash":        result.meta.content_hash || "",
-          "X-BotRev-Vaulted":     result.meta.last_vaulted || "",
-          "X-BotRev-AuditID":     auditId,
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control":        "public, max-age=60",
-        },
-      });
-    }
-
-    // List Vault objects for a publisher — GET /api/vault/list?audit_id=
-    if (path === "/api/vault/list") {
-      const auditId = url.searchParams.get("audit_id");
-      if (!auditId) return new Response("Missing audit_id", { status: 400 });
-      const objects = await vaultList(auditId);
-      return Response.json({ ok: true, objects });
-    }
-
-    // Delete from Vault — DELETE /api/vault/delete?audit_id=&slug=
-    if (path === "/api/vault/delete" && request.method === "DELETE") {
-      const auditId = url.searchParams.get("audit_id");
-      const slug    = url.searchParams.get("slug");
-      if (!auditId || !slug) return new Response("Missing params", { status: 400 });
-      await env.VAULT.delete(`${auditId}/${slug}.md`);
-      await env.VAULT.delete(`${auditId}/${slug}.meta.json`);
-      await env.DB.prepare("DELETE FROM vault_objects WHERE audit_id = ? AND slug = ?").bind(auditId, slug).run();
-      return Response.json({ ok: true, deleted: slug });
-    }
-
-    // ============================================================
-    // 10. DOMAIN DRILLDOWN
+    // 8. DOMAIN DRILLDOWN
     // ============================================================
     if (path === "/domain-drilldown") {
       const aid   = url.searchParams.get("audit_id");
@@ -894,12 +889,12 @@ export default {
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
     <button onclick="history.back()" class="btn btn-ghost btn-sm">← Back</button>
     <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px;">Audit · ${dName}</div>
-    <div style="font-family:var(--font-mono); font-size:0.9rem; color:var(--green);">$${totalRec.toFixed(4)} recovered</div>
+    <div style="font-family:var(--font-mono); font-size:0.9rem; color:var(--green);">$${totalRec.toFixed(4)} est. recovered</div>
   </div>
 
   <div class="grid-3" style="margin-bottom:24px;">
     <div class="card"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${bots.reduce((a,b)=>a+b.c,0).toLocaleString()}</div></div>
-    <div class="card"><div class="stat-label">Potential Recovery</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div></div>
+    <div class="card"><div class="stat-label">Est. Recovery Potential</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div></div>
     <div class="card"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${stealth[0]?.cnt || 0}</div></div>
   </div>
 
@@ -926,7 +921,7 @@ export default {
     }
 
     // ============================================================
-    // 11. MARKETPLACE DRILLDOWN
+    // 9. MARKETPLACE DRILLDOWN
     // ============================================================
     if (path === "/market-drilldown") {
       const aid   = url.searchParams.get("audit_id");
@@ -956,7 +951,7 @@ export default {
     }
 
     // ============================================================
-    // 12. ONBOARDING PAGE
+    // 10. ONBOARDING PAGE
     // ============================================================
     if (path === ONBOARDING_PATH) {
       const pass = url.searchParams.get("pass");
@@ -1007,7 +1002,7 @@ export default {
     }
 
     // ============================================================
-    // 13. MAIN PUBLISHER DASHBOARD
+    // 11. MAIN PUBLISHER DASHBOARD
     // ============================================================
     if (path === "/dashboard") {
       const eId    = (url.searchParams.get("entity") || "").toLowerCase();
@@ -1044,7 +1039,6 @@ export default {
 
         const domainCards = await Promise.all(domains.map(async d => {
           const active = await env.DB.prepare("SELECT timestamp FROM bot_logs WHERE audit_id = ? AND is_bot = 1 LIMIT 1").bind(d.audit_id).first();
-          const vaultCount = await env.DB.prepare("SELECT COUNT(*) as cnt FROM vault_objects WHERE audit_id = ?").bind(d.audit_id).first();
           const dnsLive = !!active;
           const dnsStatusColor  = dnsLive ? 'var(--green)' : '#f59e0b';
           const dnsStatusBorder = dnsLive ? 'var(--green)' : 'var(--border)';
@@ -1068,10 +1062,6 @@ export default {
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <a href="/domain-drilldown?audit_id=${d.audit_id}&range=${range}" class="btn btn-primary btn-sm">View Audit Log →</a>
               ${isAdmin ? `` : ''}
-              <div class="vault-bar">
-                <span class="dot" style="background:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};"></span>
-                <span style="font-family:var(--font-mono); font-size:0.65rem; color:${(vaultCount?.cnt||0)>0 ? 'var(--blue)' : 'var(--muted)'};">${vaultCount?.cnt||0} vault objects</span>
-              </div>
             </div>
             
           </div>`;
@@ -1081,7 +1071,7 @@ export default {
           ${filterBar}
           <div class="grid-3" style="margin-bottom:24px;">
             <div class="card card-lit"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${totalHits.toLocaleString()}</div></div>
-            <div class="card card-lit"><div class="stat-label">Potential Recovery</div><div class="stat-val" style="color:var(--green);">$${(stats?.tRev||0).toFixed(4)}</div></div>
+            <div class="card card-lit"><div class="stat-label">Est. Recovery Potential</div><div class="stat-val" style="color:var(--green);">$${(stats?.tRev||0).toFixed(4)}</div></div>
             <div class="card card-lit"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${(stats?.tS||0).toLocaleString()}</div></div>
           </div>
           <div class="card" style="margin-bottom:24px;">
@@ -1102,53 +1092,6 @@ export default {
           </div>
           ${domainCards.join('')}`;
 
-      // ---- VAULT TAB ----
-      } else if (tab === "vault") {
-        const vaultRows = await env.DB.prepare(
-          `SELECT * FROM vault_objects WHERE audit_id IN (${domains.map(()=>'?').join(',')}) ORDER BY last_vaulted DESC LIMIT 100`
-        ).bind(...domains.map(d=>d.audit_id)).all();
-
-        const totalChars = (vaultRows.results||[]).reduce((a,b)=>a+(b.char_count||0),0);
-
-        tabContent = `
-          ${filterBar}
-          <div class="grid-3" style="margin-bottom:24px;">
-            <div class="card"><div class="stat-label">Vault Objects</div><div class="stat-val" style="color:var(--blue);">${(vaultRows.results||[]).length}</div></div>
-            <div class="card"><div class="stat-label">Total Chars Stored</div><div class="stat-val">${totalChars.toLocaleString()}</div></div>
-            <div class="card"><div class="stat-label">Storage Est.</div><div class="stat-val">${(totalChars/1024).toFixed(1)} KB</div></div>
-          </div>
-          <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-              <div class="stat-label">Vaulted Content</div>
-              <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">Machine-Ready Markdown · BEO Optimized</div>
-            </div>
-            <table>
-              <thead><tr><th>Slug</th><th>Domain</th><th>Chars</th><th>Hash</th><th>Last Vaulted</th><th>Actions</th></tr></thead>
-              <tbody>
-              ${(vaultRows.results||[]).map(v => `
-                <tr>
-                  <td><code>${v.slug}</code></td>
-                  <td style="font-size:0.75rem; color:var(--muted);">${v.audit_id}</td>
-                  <td style="font-family:var(--font-mono); font-size:0.75rem;">${(v.char_count||0).toLocaleString()}</td>
-                  <td><code style="font-size:0.6rem;">${(v.content_hash||'').substring(0,12)}…</code></td>
-                  <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${v.last_vaulted?.replace('T',' ').substring(0,16) || '—'}</td>
-                  <td>
-                    <a href="/api/vault/get?audit_id=${v.audit_id}&slug=${v.slug}" target="_blank" class="btn btn-ghost btn-sm">View MD</a>
-                  </td>
-                </tr>`).join('')}
-              ${(vaultRows.results||[]).length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted);">No vault objects yet. Use the API to store content.</td></tr>' : ''}
-              </tbody>
-            </table>
-          </div>
-          <div class="card" style="border-color:var(--border-lit);">
-            <div class="stat-label" style="margin-bottom:12px;">Manual Vault Store</div>
-            <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); margin-bottom:12px;">POST to <code>/api/vault/store</code></div>
-            <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px; font-family:var(--font-mono); font-size:0.72rem; color:var(--green); line-height:1.8;">
-              curl -X POST https://dash.botrev.com/api/vault/store \\<br>
-              &nbsp;&nbsp;-H "Content-Type: application/json" \\<br>
-              &nbsp;&nbsp;-d '{"audit_id":"${domains[0]?.audit_id||'YOUR_AUDIT_ID'}","slug":"article-slug","html":"&lt;article&gt;...&lt;/article&gt;"}' 
-            </div>
-          </div>`;
 
       // ---- MARKETS TAB ----
       } else if (tab === "market") {
@@ -1194,16 +1137,8 @@ export default {
         tabContent = `
           <div style="max-width:780px;">
             <div class="card card-lit" style="margin-bottom:16px;">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px;">
-                <div>
-                  <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Sniffer Deployment Guide</div>
-                </div>
-                <a href="/resources/publisher-guide.pdf" target="_blank" rel="noopener" style="text-decoration:none; flex-shrink:0; margin-left:24px;">
-                  <button class="btn btn-primary btn-sm" style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Open PDF
-                  </button>
-                </a>
+              <div style="margin-bottom:18px;">
+                <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Sniffer Deployment Guide</div>
               </div>
               <div style="border-top:1px solid var(--border); padding-top:16px; margin-bottom:16px;">
                 <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:12px;">How We Deploy the Sniffer</div>
@@ -1220,32 +1155,28 @@ export default {
                   </div>
                 </div>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:0.75rem; color:var(--muted);">
-                <div><b style="color:var(--text);">DNS Active status</b> appears once bot traffic is first detected — usually within 30 min of propagation.</div>
-                <div><b style="color:var(--text);">DNS propagation slow?</b> Check dnschecker.org before troubleshooting.</div>
-                <div><b style="color:var(--text);">TTL tip:</b> Set to 300 (5 min) during onboarding for faster propagation.</div>
-              </div>
+
             </div>
             <div class="card" style="margin-bottom:16px;">
               <div class="stat-label" style="margin-bottom:16px;">CPM Recovery Matrix</div>
               <table>
-                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">Est. CPM</th></tr></thead>
+                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">CPM</th></tr></thead>
                 <tbody>
-                  <tr><td><span class="badge badge-t1">T1</span></td><td style="font-weight:700;">Premium AI</td><td style="font-size:0.75rem; color:var(--muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td><td style="text-align:right; font-family:var(--font-mono); color:var(--green);">$20.00</td></tr>
-                  <tr><td><span class="badge badge-t2">T2</span></td><td style="font-weight:700;">Headless Scrapers</td><td style="font-size:0.75rem; color:var(--muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td><td style="text-align:right; font-family:var(--font-mono); color:var(--blue);">$10.00</td></tr>
-                  <tr><td><span class="badge badge-t3">T3</span></td><td style="font-weight:700;">Verified Search</td><td style="font-size:0.75rem; color:var(--muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td><td style="text-align:right; font-family:var(--font-mono); color:var(--amber);">$5.00</td></tr>
-                  <tr><td><span class="badge badge-t4">T4</span></td><td style="font-weight:700;">Utility Bots</td><td style="font-size:0.75rem; color:var(--muted);">General crawlers, scrapers, unidentified agents</td><td style="text-align:right; font-family:var(--font-mono); color:var(--muted);">$1.00</td></tr>
+                  <tr><td><span class="badge badge-t1">T1</span></td><td style="font-weight:700;">Premium AI</td><td style="font-size:0.75rem; color:var(--muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td><td style="text-align:right; font-family:var(--font-mono); color:var(--green);">~$20.00 est.</td></tr>
+                  <tr><td><span class="badge badge-t2">T2</span></td><td style="font-weight:700;">Headless Scrapers</td><td style="font-size:0.75rem; color:var(--muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td><td style="text-align:right; font-family:var(--font-mono); color:var(--blue);">~$10.00 est.</td></tr>
+                  <tr><td><span class="badge badge-t3">T3</span></td><td style="font-weight:700;">Verified Search</td><td style="font-size:0.75rem; color:var(--muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td><td style="text-align:right; font-family:var(--font-mono); color:var(--amber);">~$5.00 est.</td></tr>
+                  <tr><td><span class="badge badge-t4">T4</span></td><td style="font-weight:700;">Utility Bots</td><td style="font-size:0.75rem; color:var(--muted);">General crawlers, scrapers, unidentified agents</td><td style="text-align:right; font-family:var(--font-mono); color:var(--muted);">~$1.00 est.</td></tr>
                 </tbody>
               </table>
             </div>
             <div class="card">
-              <div class="stat-label" style="margin-bottom:16px;">The Vault — How It Works</div>
+              <div class="stat-label" style="margin-bottom:16px;">How BotRev Works</div>
               <div style="font-size:0.85rem; color:var(--muted); line-height:1.9;">
-                BotRev converts your HTML pages into machine-optimized <b style="color:var(--text);">Clean Markdown</b> stored in a global R2 Vault. When a verified AI bot requests your content, it hits the Vault — not your origin server. This means:<br><br>
-                <b style="color:var(--text);">Origin Shielding:</b> Bot requests never touch your database.<br>
-                <b style="color:var(--text);">Machine UX:</b> AI agents process Markdown 10× faster than HTML.<br>
-                <b style="color:var(--text);">Freshness Premiums:</b> Marketplaces pays more for content vaulted within 60 seconds of publication.<br>
-                <b style="color:var(--text);">BEO Metadata:</b> Invisible tags in every Vault object ensure your brand is cited in AI responses.
+                BotRev sits between AI crawlers and your origin server, classifying every bot request in real time and routing verified AI agents to your marketplace partners.<br><br>
+                <b style="color:var(--text);">Traffic Layer:</b> One CNAME record — BotRev handles everything else.<br>
+                <b style="color:var(--text);">Tier Classification:</b> Every bot is scored T1–T4 by identity and intent.<br>
+                <b style="color:var(--text);">Marketplace Routing:</b> Verified AI hits are billed via TollBit, Dappier, and partners.<br>
+                <b style="color:var(--text);">Revenue Reporting:</b> Real-time earnings tracked per domain, per marketplace.
               </div>
             </div>
           </div>`;
@@ -1266,7 +1197,6 @@ export default {
 
       const tabs = [
         { id: "audit",  label: "Audit" },
-        { id: "vault",  label: "Vault" },
         { id: "market", label: "Marketplaces" },
         { id: "faq",    label: "Resources" },
       ];
@@ -1302,7 +1232,7 @@ export default {
     }
 
     // ============================================================
-    // 14. LOGIN
+    // 12. LOGIN
     // ============================================================
     if (path === "/login") {
       if (request.method === "POST") {
@@ -1345,7 +1275,7 @@ export default {
     }
 
     // ============================================================
-    // 15. MISC API
+    // 13. MISC API
     // ============================================================
     if (path === "/api/update-account" && request.method === "POST") {
       const eId = url.searchParams.get("entity");
@@ -1355,7 +1285,7 @@ export default {
     }
 
     // ============================================================
-    // 16. DELETE PUBLISHER — POST /api/admin/delete-publisher
+    // 14. DELETE PUBLISHER — POST /api/admin/delete-publisher
     // ============================================================
     if (path === "/api/admin/delete-publisher" && request.method === "POST") {
       const pass    = url.searchParams.get("pass");
@@ -1369,17 +1299,88 @@ export default {
       }
 
       try {
-        // 1. Purge all R2 Vault objects for this publisher
-        const vaultList = await env.VAULT.list({ prefix: `${auditId}/` });
-        await Promise.all(vaultList.objects.map(obj => env.VAULT.delete(obj.key)));
-
-        // 2. Delete from all D1 tables
-        await env.DB.prepare("DELETE FROM vault_objects         WHERE audit_id = ?").bind(auditId).run();
+        // Delete from all D1 tables
         await env.DB.prepare("DELETE FROM bot_logs              WHERE audit_id = ?").bind(auditId).run();
         await env.DB.prepare("DELETE FROM publisher_marketplaces WHERE audit_id = ?").bind(auditId).run();
         await env.DB.prepare("DELETE FROM publisher_entities    WHERE audit_id = ?").bind(auditId).run();
 
         return Response.json({ ok: true, deleted: auditId });
+      } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+      }
+    }
+
+    // ============================================================
+    // 15. GET PUBLISHER DETAIL — GET /api/admin/publisher-detail
+    // ============================================================
+    if (path === "/api/admin/publisher-detail") {
+      const pass    = url.searchParams.get("pass");
+      const auditId = url.searchParams.get("audit_id");
+      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      if (!auditId)               return Response.json({ ok: false, error: "Missing audit_id" }, { status: 400 });
+
+      const publisher = await env.DB
+        .prepare("SELECT * FROM publisher_entities WHERE audit_id = ? LIMIT 1")
+        .bind(auditId).first();
+      if (!publisher) return Response.json({ ok: false, error: "Publisher not found" }, { status: 404 });
+
+      const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+      const keyRows = await env.DB
+        .prepare("SELECT marketplace_name, api_key FROM publisher_marketplaces WHERE audit_id = ?")
+        .bind(auditId).all();
+      const keys = {};
+      markets.forEach(m => { keys[m] = ""; });
+      (keyRows.results || []).forEach(r => { keys[r.marketplace_name] = r.api_key || ""; });
+
+      return Response.json({ ok: true, publisher, keys });
+    }
+
+    // ============================================================
+    // 16. UPDATE PUBLISHER — POST /api/admin/update-publisher
+    // ============================================================
+    if (path === "/api/admin/update-publisher" && request.method === "POST") {
+      const pass = url.searchParams.get("pass");
+      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+
+      let body;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
+
+      const { original_audit_id, pub_user_id, audit_id, domain_name, email, password, integration_type, origin_server, keys } = body;
+      if (!original_audit_id || !pub_user_id || !audit_id || !domain_name) {
+        return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
+      }
+
+      try {
+        const auditIdChanged = audit_id !== original_audit_id;
+
+        // 1. Update publisher_entities
+        await env.DB.prepare(
+          "UPDATE publisher_entities SET pub_user_id=?, audit_id=?, domain_name=?, email=?, password=?, integration_type=?, origin_server=? WHERE audit_id=?"
+        ).bind(
+          pub_user_id.toLowerCase(), audit_id, domain_name,
+          email || null, password || null,
+          integration_type || "B", origin_server || null,
+          original_audit_id
+        ).run();
+
+        // 2. If audit_id changed, cascade to related tables
+        if (auditIdChanged) {
+          await env.DB.prepare("UPDATE bot_logs SET audit_id=? WHERE audit_id=?").bind(audit_id, original_audit_id).run();
+          await env.DB.prepare("UPDATE publisher_marketplaces SET audit_id=? WHERE audit_id=?").bind(audit_id, original_audit_id).run();
+        }
+
+        // 3. Upsert marketplace keys
+        const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+        for (const m of markets) {
+          const apiKey = (keys && keys[m]) ? keys[m].trim() : "";
+          if (apiKey) {
+            await env.DB.prepare(
+              "INSERT INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?) ON CONFLICT(audit_id, marketplace_name) DO UPDATE SET api_key=excluded.api_key"
+            ).bind(audit_id, m, apiKey).run();
+          }
+        }
+
+        return Response.json({ ok: true, audit_id });
       } catch (err) {
         return Response.json({ ok: false, error: err.message }, { status: 500 });
       }
