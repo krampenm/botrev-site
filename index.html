@@ -4,11 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BotRev — The AI Monetization Layer for Publishers</title>
-  <meta name="description" content="BotRev turns uncompensated AI bot traffic into managed revenue for publishers. Bot Extraction Optimization, detection, and marketplace routing.">
+  <meta name="description" content="BotRev turns uncompensated AI bot traffic into managed revenue for publishers. Detection, content intelligence, and earnings — managed end-to-end.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    /* ── ARCTIC SLATE — botrev.com ─────────────────────────── */
     :root {
       --bg:          #F0F4F8;
       --surface:     #FFFFFF;
@@ -33,7 +32,7 @@
     html { scroll-behavior: smooth; }
     body { font-family: var(--font-display); background: var(--bg); color: var(--text); }
 
-    /* ── NAV ──────────────────────────────────────────────── */
+    /* ── NAV ── */
     nav {
       background: var(--navy);
       position: sticky; top: 0; z-index: 100;
@@ -71,7 +70,7 @@
     }
     .nav-portal:hover { color: var(--navy); border-color: var(--navy-mid); background: var(--surface-2); }
 
-    /* ── HERO ─────────────────────────────────────────────── */
+    /* ── HERO ── */
     .hero {
       background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 60%, #1a4f7a 100%);
       padding: 96px 32px 80px;
@@ -117,7 +116,7 @@
     }
     .btn-hero-ghost:hover { border-color: var(--green); color: var(--green); }
 
-    /* Hero right — stat card */
+    /* Hero right — signal card */
     .hero-card {
       background: rgba(255,255,255,0.07); border: 1px solid rgba(168,197,232,0.2);
       border-radius: 16px; padding: 32px; backdrop-filter: blur(10px);
@@ -131,35 +130,33 @@
       padding: 12px 0; border-bottom: 1px solid rgba(168,197,232,0.1);
     }
     .tier-row:last-child { border-bottom: none; }
-    .tier-label { font-size: 0.88rem; color: #CBD8E8; }
+    .tier-label { font-size: 0.88rem; color: #CBD8E8; font-weight: 600; }
     .tier-examples { font-family: var(--font-mono); font-size: 0.68rem; color: var(--light-muted); margin-top: 2px; }
-    .tier-cpm { font-family: var(--font-mono); font-weight: 500; font-size: 1.1rem; }
-    .cpm-t1 { color: var(--green); }
-    .cpm-t2 { color: #60A5FA; }
-    .cpm-t3 { color: #FBBF24; }
-    .cpm-t4 { color: var(--light-muted); }
+    .tier-signal { font-family: var(--font-mono); font-weight: 500; font-size: 0.8rem; letter-spacing: 1px; }
+    .sig-t1 { color: var(--green); }
+    .sig-t2 { color: #60A5FA; }
+    .sig-t3 { color: #FBBF24; }
+    .sig-t4 { color: var(--light-muted); }
 
-    /* ── LEAK STRIP ───────────────────────────────────────── */
-    .leak-strip {
+    /* ── TRUST STRIP ── */
+    .trust-strip {
       background: var(--navy); padding: 20px 32px;
       border-bottom: 3px solid var(--green);
     }
-    .leak-inner {
+    .trust-inner {
       max-width: 1200px; margin: auto;
       display: flex; justify-content: space-around; align-items: center;
       gap: 24px; flex-wrap: wrap;
     }
-    .leak-stat { text-align: center; }
-    .leak-val {
+    .trust-stat { text-align: center; }
+    .trust-val {
       font-family: var(--font-mono); font-size: 1.8rem;
       font-weight: 500; color: var(--green);
     }
-    .leak-desc {
-      font-size: 0.78rem; color: var(--light-muted); margin-top: 2px;
-    }
-    .leak-div { width: 1px; height: 40px; background: rgba(168,197,232,0.15); }
+    .trust-desc { font-size: 0.78rem; color: var(--light-muted); margin-top: 2px; }
+    .trust-div { width: 1px; height: 40px; background: rgba(168,197,232,0.15); }
 
-    /* ── SECTIONS ─────────────────────────────────────────── */
+    /* ── SECTIONS ── */
     .section { padding: 80px 32px; }
     .section-inner { max-width: 1200px; margin: auto; }
     .section-alt { background: var(--surface); }
@@ -180,7 +177,7 @@
     }
     .section-navy .section-sub { color: var(--light-muted); }
 
-    /* ── HOW IT WORKS ─────────────────────────────────────── */
+    /* ── HOW IT WORKS ── */
     .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
     .step {
       background: var(--surface); border: 1px solid var(--border);
@@ -197,8 +194,14 @@
     }
     .step h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
     .step p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
+    .step-tag {
+      display: inline-block; margin-top: 14px;
+      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--green);
+      background: var(--green-tint); padding: 4px 10px; border-radius: 4px;
+    }
 
-    /* ── FEATURES ─────────────────────────────────────────── */
+    /* ── FEATURES ── */
     .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .feature-card {
       background: var(--surface); border: 1px solid var(--border);
@@ -213,60 +216,74 @@
     }
     .feature-card h3 { font-size: 1.05rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
     .feature-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
-
-    /* ── REVENUE TABLE ────────────────────────────────────── */
-    .rev-table {
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(168,197,232,0.15);
-      border-radius: 12px; overflow: hidden; width: 100%;
-    }
-    .rev-table th {
-      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--light-muted);
-      padding: 14px 20px; text-align: left;
-      border-bottom: 1px solid rgba(168,197,232,0.15);
-    }
-    .rev-table td {
-      padding: 16px 20px; font-size: 0.9rem; color: #CBD8E8;
-      border-bottom: 1px solid rgba(168,197,232,0.08);
-    }
-    .rev-table tr:last-child td { border-bottom: none; }
-    .rev-table tr:hover td { background: rgba(255,255,255,0.03); }
-    .rev-cpm { font-family: var(--font-mono); font-weight: 500; font-size: 1rem; }
-    .badge-tier {
-      display: inline-block; font-family: var(--font-mono); font-size: 0.55rem;
-      letter-spacing: 1px; padding: 3px 8px; border-radius: 4px;
-      border: 1px solid; text-transform: uppercase;
+    .feature-card .feature-tag {
+      display: inline-block; margin-top: 14px;
+      font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--muted);
+      border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px;
     }
 
-    /* ── MODEL SECTION ────────────────────────────────────── */
-    .model-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
-    .model-points { display: flex; flex-direction: column; gap: 20px; }
-    .model-point { display: flex; gap: 16px; align-items: flex-start; }
-    .model-dot {
+    /* ── HOW WE EARN ── */
+    .earn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+    .earn-points { display: flex; flex-direction: column; gap: 20px; }
+    .earn-point { display: flex; gap: 16px; align-items: flex-start; }
+    .earn-dot {
       width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
       background: var(--green-tint); border: 2px solid var(--green);
       display: flex; align-items: center; justify-content: center;
       font-size: 0.9rem;
     }
-    .model-point h4 { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
-    .model-point p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
-    .model-payout {
-      background: var(--navy); border-radius: 16px; padding: 36px;
-      text-align: center;
-    }
-    .payout-number {
-      font-family: var(--font-mono); font-size: 4rem; font-weight: 500;
-      color: var(--green); line-height: 1;
-    }
-    .payout-label { color: var(--light-muted); font-size: 0.9rem; margin-top: 8px; margin-bottom: 28px; }
-    .payout-divider {
-      height: 1px; background: rgba(168,197,232,0.15); margin: 20px 0;
-    }
-    .payout-row { display: flex; justify-content: space-between; padding: 8px 0; }
-    .payout-row span { font-family: var(--font-mono); font-size: 0.8rem; color: var(--light-muted); }
-    .payout-row strong { font-family: var(--font-mono); font-size: 0.85rem; color: #fff; }
+    .earn-point h4 { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .earn-point p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
 
-    /* ── CTA ──────────────────────────────────────────────── */
+    /* Earn card — right side */
+    .earn-card {
+      background: var(--navy); border-radius: 16px; padding: 36px;
+    }
+    .earn-card-label {
+      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--light-muted); margin-bottom: 20px;
+    }
+    .earn-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 14px 0; border-bottom: 1px solid rgba(168,197,232,0.08);
+    }
+    .earn-row:last-of-type { border-bottom: none; }
+    .earn-row-label { font-size: 0.88rem; color: #CBD8E8; font-weight: 600; }
+    .earn-row-desc { font-size: 0.75rem; color: var(--light-muted); margin-top: 3px; line-height: 1.5; }
+    .earn-row-signal {
+      font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 1px;
+      padding: 4px 10px; border-radius: 5px; border: 1px solid; flex-shrink: 0; margin-top: 2px;
+    }
+    .earn-divider { height: 1px; background: rgba(168,197,232,0.12); margin: 20px 0; }
+    .earn-summary {
+      text-align: center; padding-top: 8px;
+    }
+    .earn-summary-label {
+      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--green); margin-bottom: 8px;
+    }
+    .earn-summary-copy {
+      font-size: 0.88rem; color: var(--light-muted); line-height: 1.7;
+    }
+
+    /* ── PUBLISHER QUOTE ── */
+    .quote-section {
+      background: var(--green-tint); border-top: 3px solid var(--green);
+      border-bottom: 3px solid var(--green); padding: 56px 32px;
+    }
+    .quote-inner { max-width: 800px; margin: auto; text-align: center; }
+    .quote-mark { font-size: 3rem; color: var(--green); line-height: 1; margin-bottom: 12px; font-family: Georgia, serif; }
+    .quote-text {
+      font-size: 1.25rem; font-weight: 700; color: var(--navy);
+      line-height: 1.6; margin-bottom: 20px;
+    }
+    .quote-attr {
+      font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--muted);
+    }
+
+    /* ── CTA ── */
     .cta-section {
       background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%);
       padding: 80px 32px; text-align: center;
@@ -282,7 +299,7 @@
     }
     .cta-email:hover { background: var(--green-dim); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(16,185,129,0.35); }
 
-    /* ── FOOTER ───────────────────────────────────────────── */
+    /* ── FOOTER ── */
     footer {
       background: #0F2137; padding: 32px;
       border-top: 1px solid rgba(168,197,232,0.1);
@@ -299,14 +316,17 @@
     .footer-link:hover { color: var(--light-muted); }
     .footer-copy { color: #2D4A6A; font-size: 0.78rem; width: 100%; text-align: center; margin-top: 12px; }
 
-    /* ── RESPONSIVE ───────────────────────────────────────── */
+    /* ── MODAL ── */
+    #auditModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,33,55,0.75); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px; }
+
+    /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
       .hero-inner { grid-template-columns: 1fr; }
       .hero-card { display: none; }
       .steps { grid-template-columns: 1fr 1fr; }
       .features { grid-template-columns: 1fr 1fr; }
-      .model-grid { grid-template-columns: 1fr; }
-      .leak-div { display: none; }
+      .earn-grid { grid-template-columns: 1fr; }
+      .trust-div { display: none; }
     }
     @media (max-width: 600px) {
       .steps, .features { grid-template-columns: 1fr; }
@@ -323,7 +343,7 @@
       <div class="nav-links">
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
-        <a class="nav-link" href="#model">Pricing</a>
+        <a class="nav-link" href="#earn">Earnings</a>
         <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
         <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
       </div>
@@ -331,12 +351,12 @@
   </nav>
 
   <!-- AUDIT FORM MODAL -->
-  <div id="auditModal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,33,55,0.75); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px;">
+  <div id="auditModal">
     <div style="background:#fff; border-radius:16px; padding:40px; width:100%; max-width:480px; position:relative; box-shadow:0 32px 80px rgba(30,58,95,0.3);">
       <button onclick="closeAuditForm()" style="position:absolute; top:16px; right:20px; background:none; border:none; cursor:pointer; font-size:1.4rem; color:#5A7FA8; line-height:1;">×</button>
       <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:#10B981; margin-bottom:10px;">Free · No Commitment</div>
       <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:800; color:#1E3A5F; margin-bottom:6px;">Start Your Free Audit</h2>
-      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we'll reach out within 24 hours to kick off your free Leaky Pipe Audit.</p>
+      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we'll reach out within 24 hours to kick off your free Content Intelligence Audit.</p>
 
       <form id="auditForm" action="https://formspree.io/f/mjgagjbl" method="POST">
         <input type="hidden" name="_subject" value="New BotRev Audit Request">
@@ -380,16 +400,13 @@
           onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">
           → Send Audit Request
         </button>
-
-        <p style="font-size:0.75rem; color:#A8C5E8; text-align:center; margin-top:12px;">
-          We'll respond within 24 hours. No spam, ever.
-        </p>
+        <p style="font-size:0.75rem; color:#A8C5E8; text-align:center; margin-top:12px;">We'll respond within 24 hours. No spam, ever.</p>
       </form>
 
       <div id="auditSuccess" style="display:none; text-align:center; padding:20px 0;">
         <div style="font-size:2.5rem; margin-bottom:12px;">✓</div>
         <h3 style="font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:700; color:#1E3A5F; margin-bottom:8px;">Audit Request Received</h3>
-        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch with you shortly to kick off your free audit.</p>
+        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly to kick off your free Content Intelligence Audit.</p>
       </div>
     </div>
   </div>
@@ -398,70 +415,103 @@
   <section class="hero">
     <div class="hero-inner">
       <div>
-        <div class="hero-eyebrow">Your content feeds the machines. Time to get paid.</div>
-        <h1>Your AI traffic<br>is worth <em>money.</em></h1>
-        <p class="hero-sub">AI bots hit your site tens of thousands of times a month. They're consuming your content, fueling their models, and paying you nothing. BotRev changes that — detection, routing, and monthly payouts managed end-to-end.</p>
+        <div class="hero-eyebrow">Your content feeds the AI economy. Time to get paid.</div>
+        <h1>Your content is<br>worth <em>more</em> than<br>you're earning.</h1>
+        <p class="hero-sub">AI companies are crawling your site every day — consuming your writing, training their models, and building billion-dollar products on your work. BotRev identifies that activity, quantifies its value, and manages your earnings. No technical setup required.</p>
         <div class="hero-actions">
           <a class="btn-hero-primary" href="#" onclick="openAuditForm(); return false;">→ Start Your Free Audit</a>
+          <a class="btn-hero-ghost" href="#how">See How It Works</a>
         </div>
       </div>
       <div class="hero-card">
-        <div class="hero-card-label">CPM Recovery Matrix —           Est. Rates</div>
+        <div class="hero-card-label">AI Traffic Intelligence — Live Signal</div>
         <div class="tier-row">
           <div>
-            <div class="tier-label" style="font-weight:700;">T1 — Premium AI</div>
+            <div class="tier-label">Premium AI Agents</div>
             <div class="tier-examples">OpenAI · Claude · Perplexity · Gemini</div>
           </div>
-          <div class="tier-cpm cpm-t1">$20.00</div>
+          <div class="tier-signal sig-t1">████████ HIGH</div>
         </div>
         <div class="tier-row">
           <div>
-            <div class="tier-label">T2 — Headless Scrapers</div>
-            <div class="tier-examples">Puppeteer · Playwright · Selenium</div>
+            <div class="tier-label">Advanced Automation</div>
+            <div class="tier-examples">Headless browsers · Scraping frameworks</div>
           </div>
-          <div class="tier-cpm cpm-t2">$10.00</div>
+          <div class="tier-signal sig-t2">██████░░ MED</div>
         </div>
         <div class="tier-row">
           <div>
-            <div class="tier-label">T3 — Verified Search</div>
+            <div class="tier-label">Search Intelligence</div>
             <div class="tier-examples">Googlebot · Bingbot · DuckDuckBot</div>
           </div>
-          <div class="tier-cpm cpm-t3">$5.00</div>
+          <div class="tier-signal sig-t3">████░░░░ STD</div>
         </div>
         <div class="tier-row">
           <div>
-            <div class="tier-label">T4 — Utility Bots</div>
-            <div class="tier-examples">General crawlers · Unidentified agents</div>
+            <div class="tier-label">General Crawlers</div>
+            <div class="tier-examples">Unidentified agents · Utility bots</div>
           </div>
-          <div class="tier-cpm cpm-t4">$1.00</div>
+          <div class="tier-signal sig-t4">██░░░░░░ LOW</div>
+        </div>
+        <div style="margin-top:20px; padding-top:16px; border-top:1px solid rgba(168,197,232,0.12);">
+          <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">What this means for you</div>
+          <div style="font-size:0.82rem; color:var(--light-muted); line-height:1.6;">Every signal above represents real AI activity on your content — activity that has a quantifiable market value. BotRev's proprietary demand-based pricing algorithm ensures you capture it.</div>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- TRUST STRIP -->
+  <div class="trust-strip">
+    <div class="trust-inner">
+      <div class="trust-stat">
+        <div class="trust-val">14 Days</div>
+        <div class="trust-desc">To a complete content intelligence picture</div>
+      </div>
+      <div class="trust-div"></div>
+      <div class="trust-stat">
+        <div class="trust-val">1 Record</div>
+        <div class="trust-desc">One DNS record is all it takes to deploy</div>
+      </div>
+      <div class="trust-div"></div>
+      <div class="trust-stat">
+        <div class="trust-val">$0 Upfront</div>
+        <div class="trust-desc">The audit is always free. No commitment.</div>
+      </div>
+      <div class="trust-div"></div>
+      <div class="trust-stat">
+        <div class="trust-val">100%</div>
+        <div class="trust-desc">Publisher-first. Your data, your content, your earnings.</div>
+      </div>
+    </div>
+  </div>
 
   <!-- HOW IT WORKS -->
   <section class="section" id="how">
     <div class="section-inner">
       <div class="section-eyebrow">The Process</div>
-      <h2 class="section-title">From invisible traffic to monthly payouts</h2>
-      <p class="section-sub">Four steps. Zero technical overhead on your end. BotRev manages the full chain.</p>
+      <h2 class="section-title">From invisible AI traffic<br>to monthly earnings</h2>
+      <p class="section-sub">Four steps. No engineers needed. BotRev handles everything — you stay focused on publishing.</p>
       <div class="steps">
         <div class="step" data-n="STEP 01">
-          <h3>Install the Sniffer</h3>
-          <p>The Sniffer works with Cloudflare, WordPress, Ghost, Shopify, and any GTM setup. Done in under 5 minutes.</p>
+          <h3>Free Content Intelligence Audit</h3>
+          <p>We analyze 14 days of AI activity on your site — identifying every agent type visiting your content, how often, and what that activity is worth. You'll see a clear picture of your content's value in the AI economy before you commit to anything.</p>
+          <span class="step-tag">No signup required</span>
         </div>
         <div class="step" data-n="STEP 02">
-          <h3>14-Day Leaky Pipe Audit</h3>
-          <p>We run a full 14-day audit showing every AI bot that visited your site, what tier they're in, and the exact dollar value of your uncompensated traffic.</p>
+          <h3>One-Line Deployment</h3>
+          <p>If you choose to proceed, deployment takes one DNS record change — typically five minutes. Works with every major platform: WordPress, Ghost, Squarespace, Wix, Shopify, custom builds. No plugin installs, no code changes, no developer needed.</p>
+          <span class="step-tag">Works on any platform</span>
         </div>
         <div class="step" data-n="STEP 03">
-          <h3>Marketplace Routing</h3>
-          <p>BotRev connects your traffic to TollBit, Dappier, and ProRata — routing each bot tier to the highest-yielding marketplace in real time.</p>
+          <h3>BotRev Manages Everything</h3>
+          <p>BotRev's proprietary demand-based pricing algorithm runs continuously in the background — classifying every AI interaction, optimizing the value of your content in real time, and managing your enrollment in the AI content licensing ecosystem on your behalf.</p>
+          <span class="step-tag">Fully managed</span>
         </div>
         <div class="step" data-n="STEP 04">
-          <h3>Monthly Payouts</h3>
-          <p>We reconcile all marketplace earnings and send you a unified monthly statement with full transparency on every bot hit, tier, and marketplace transaction.</p>
+          <h3>Monthly Earnings Statement</h3>
+          <p>Each month you receive a clear, unified earnings statement — every AI interaction logged, every dollar accounted for, independently verified by BotRev's own data. One payment, full transparency.</p>
+          <span class="step-tag">Publisher-first reporting</span>
         </div>
       </div>
     </div>
@@ -471,155 +521,147 @@
   <section class="section section-alt" id="features">
     <div class="section-inner">
       <div class="section-eyebrow">The Platform</div>
-      <h2 class="section-title">Everything built for the machine-first internet</h2>
-      <p class="section-sub">BotRev isn't a plugin. It's a full monetization infrastructure stack.</p>
+      <h2 class="section-title">Built for the content creator<br>in the age of AI</h2>
+      <p class="section-sub">BotRev isn't a plugin. It's a complete content intelligence and earnings infrastructure — designed so you never have to think about the technical side.</p>
       <div class="features">
         <div class="feature-card">
           <div class="feature-icon">⚡</div>
-          <h3>Edge Bot Detection</h3>
-          <p>The BotRev Sniffer runs at the Cloudflare Worker layer — intercepting and classifying every bot before it touches your origin server. Tier 1 through Tier 4, plus stealth crawler detection for bots disguised as human browsers.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔒</div>
-          <h3>The BotRev Vault</h3>
-          <p>Your content converted to clean, LLM ready markdown file and stored in our global Vault. AI agents read from the Vault — not your database. Origin shielding, machine UX, and Freshness Premiums for content vaulted within 60 seconds of publication.</p>
+          <h3>AI Traffic Detection</h3>
+          <p>BotRev identifies every AI agent visiting your site — from the largest language model companies to headless automation tools — and classifies each one by type, intent, and content value signal. All invisible to your readers.</p>
+          <span class="feature-tag">Always on</span>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📈</div>
-          <h3>Yield Arbitrage</h3>
-          <p>BotRev routes each bot hit to the marketplace paying the highest rate at that moment — TollBit, Dappier, ProRata, and more. The Logarithmic Damper Algorithm scales CPM up to 4x during re-indexing bursts.</p>
+          <h3>Proprietary Demand-Based Pricing</h3>
+          <p>BotRev's proprietary algorithm dynamically optimizes the value of your content in real time based on demand signals — so when AI interest in your content spikes, your earnings follow automatically. No manual rate-setting required.</p>
+          <span class="feature-tag">Fully automated</span>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🛡️</div>
-          <h3>Stealth Crawler Detection</h3>
-          <p>Advanced heuristics identify bots disguised as Chrome or Safari by checking Accept headers, Accept-Language, and encoding signals. Caught and logged with full documentation.</p>
+          <h3>Independent Audit Layer</h3>
+          <p>BotRev maintains its own independent log of every AI interaction on your content — giving you a verified record that isn't controlled by any marketplace or AI company. You own your data. Always.</p>
+          <span class="feature-tag">Publisher-owned data</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Content Intelligence Reports</h3>
+          <p>Learn which of your articles, topics, and content formats attract the most AI attention — and what that attention is worth. BotRev turns your traffic data into editorial insights you can actually act on.</p>
+          <span class="feature-tag">Coming soon</span>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📊</div>
           <h3>Publisher Dashboard</h3>
-          <p>Real-time audit data, vault management, marketplace status, and revenue tracking — all in one clean dashboard. Log in with your Network ID and Access Key.</p>
+          <p>Real-time AI traffic data, earnings tracking, and content performance — in one clean, easy-to-read dashboard. No training required. Log in with your Network ID and Access Key.</p>
+          <span class="feature-tag">Live data</span>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📋</div>
           <h3>Bot Extraction Optimization</h3>
-          <p>BEO is the machine-readable equivalent of SEO. BotRev optimizes your content structure, metadata, and Vault configuration so AI agents cite your brand in their responses and gives you more visiblity on their services.</p>
+          <p>BEO is the machine-readable equivalent of SEO. BotRev helps structure your content so AI agents can find it, cite it, and credit your brand — giving you visibility inside AI responses, not just search results.</p>
+          <span class="feature-tag">New discipline</span>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- REVENUE MODEL -->
-  <section class="section section-navy" id="model">
+  <!-- HOW YOU EARN -->
+  <section class="section section-navy" id="earn">
     <div class="section-inner">
-      <div class="section-eyebrow" style="color:var(--green);">Revenue Model</div>
-      <div class="model-grid">
+      <div class="section-eyebrow" style="color:var(--green);">How You Earn</div>
+      <div class="earn-grid">
         <div>
-          <h2 class="section-title">Simple split.<br>Publisher-first.</h2>
-          <p class="section-sub">No monthly fees. No setup costs. BotRev earns only when you earn.</p>
+          <h2 class="section-title">Publisher-first.<br>Zero upfront cost.</h2>
+          <p class="section-sub">BotRev earns only when you earn. No monthly fees. No setup costs. No surprises.</p>
 
-          <table class="rev-table" style="margin-bottom:32px;">
-            <thead>
-              <tr>
-                <th>Tier</th>
-                <th>Bot Class</th>
-                <th>Example Agents</th>
-                <th style="text-align:right;">CPM Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="badge-tier" style="border-color:#10B981; color:#10B981;">T1</span></td>
-                <td style="font-weight:600; color:#fff;">Premium AI</td>
-                <td style="font-size:0.8rem; color:var(--light-muted);">OpenAI, Claude, AppleBot, Perplexity, ByteSpider</td>
-                <td style="text-align:right;"><span class="rev-cpm cpm-t1">$20.00</span></td>
-              </tr>
-              <tr>
-                <td><span class="badge-tier" style="border-color:#60A5FA; color:#60A5FA;">T2</span></td>
-                <td style="font-weight:600; color:#fff;">Headless Scrapers</td>
-                <td style="font-size:0.8rem; color:var(--light-muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td>
-                <td style="text-align:right;"><span class="rev-cpm cpm-t2">$10.00</span></td>
-              </tr>
-              <tr>
-                <td><span class="badge-tier" style="border-color:#FBBF24; color:#FBBF24;">T3</span></td>
-                <td style="font-weight:600; color:#fff;">Verified Search</td>
-                <td style="font-size:0.8rem; color:var(--light-muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td>
-                <td style="text-align:right;"><span class="rev-cpm cpm-t3">$5.00</span></td>
-              </tr>
-              <tr>
-                <td><span class="badge-tier" style="border-color:#5A7FA8; color:#5A7FA8;">T4</span></td>
-                <td style="font-weight:600; color:#fff;">Utility Bots</td>
-                <td style="font-size:0.8rem; color:var(--light-muted);">General crawlers, unidentified agents</td>
-                <td style="text-align:right;"><span class="rev-cpm cpm-t4">$1.00</span></td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="model-points">
-            <div class="model-point">
-              <div class="model-dot">✓</div>
+          <div class="earn-points">
+            <div class="earn-point">
+              <div class="earn-dot">✓</div>
               <div>
-                <h4>No upfront cost</h4>
-                <p>The audit is completely free. No credit card, no commitment.</p>
+                <h4>The audit is always free</h4>
+                <p>We show you the full picture of your AI traffic value before you make any decision. No credit card, no commitment, no pressure.</p>
               </div>
             </div>
-            <div class="model-point">
-              <div class="model-dot">✓</div>
+            <div class="earn-point">
+              <div class="earn-dot">✓</div>
               <div>
-                <h4>Performance-only fee</h4>
-                <p>BotRev's management fee applies only to recovered revenue. Zero revenue, zero fee.</p>
+                <h4>Performance-based fees only</h4>
+                <p>BotRev earns a performance fee only on earnings we generate for you. If we don't produce results, you owe us nothing.</p>
               </div>
             </div>
-            <div class="model-point">
-              <div class="model-dot">✓</div>
+            <div class="earn-point">
+              <div class="earn-dot">✓</div>
               <div>
-                <h4>Monthly unified payout</h4>
-                <p>One statement. Paid monthly.</p>
+                <h4>One statement. One payment. Monthly.</h4>
+                <p>All earnings from all AI activity consolidated into a single clear monthly statement. No fragmented reports, no chasing multiple platforms.</p>
+              </div>
+            </div>
+            <div class="earn-point">
+              <div class="earn-dot">✓</div>
+              <div>
+                <h4>Your data stays yours</h4>
+                <p>BotRev's independent audit log is your record, not a marketplace's. You always have full visibility into your own content's performance — from a source that works for you, not them.</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="model-payout">
-          <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--light-muted); margin-bottom:16px;">Example Publisher</div>
-          <div style="font-size:0.85rem; color:var(--light-muted); margin-bottom:6px;">AI Bot Traffic</div>
-          <div style="font-family:var(--font-mono); font-size:1.4rem; color:#fff; margin-bottom:20px;">120,000 hits/mo</div>
-          <div class="payout-divider"></div>
-          <div class="payout-row">
-            <span>T1 Premium AI (8k hits)</span>
-            <strong>$160.00</strong>
+        <div class="earn-card">
+          <div class="earn-card-label">What BotRev Classifies For You</div>
+
+          <div class="earn-row">
+            <div>
+              <div class="earn-row-label">Premium AI Agents</div>
+              <div class="earn-row-desc">The largest AI companies — language models, reasoning engines, and RAG-based research tools consuming your content at scale.</div>
+            </div>
+            <div class="earn-row-signal" style="border-color:#10B981; color:#10B981;">HIGH VALUE</div>
           </div>
-          <div class="payout-row">
-            <span>T2 Headless (22k hits)</span>
-            <strong>$220.00</strong>
+          <div class="earn-row">
+            <div>
+              <div class="earn-row-label">Advanced Automation</div>
+              <div class="earn-row-desc">Headless browsers and scraping frameworks extracting your content for commercial applications.</div>
+            </div>
+            <div class="earn-row-signal" style="border-color:#60A5FA; color:#60A5FA;">MEDIUM</div>
           </div>
-          <div class="payout-row">
-            <span>T3 Search (45k hits)</span>
-            <strong>$225.00</strong>
+          <div class="earn-row">
+            <div>
+              <div class="earn-row-label">Search Intelligence</div>
+              <div class="earn-row-desc">Verified search engine crawlers indexing your content for discovery and AI-powered answers.</div>
+            </div>
+            <div class="earn-row-signal" style="border-color:#FBBF24; color:#FBBF24;">STANDARD</div>
           </div>
-          <div class="payout-row">
-            <span>T4 Utility (45k hits)</span>
-            <strong>$45.00</strong>
+          <div class="earn-row">
+            <div>
+              <div class="earn-row-label">General Crawlers</div>
+              <div class="earn-row-desc">Unidentified automated agents and utility bots — logged, classified, and accounted for.</div>
+            </div>
+            <div class="earn-row-signal" style="border-color:#5A7FA8; color:#5A7FA8;">TRACKED</div>
           </div>
-          <div class="payout-divider"></div>
-          <div class="payout-row">
-            <span>Gross Monthly Recovery</span>
-            <strong style="color:#fff;">$650.00</strong>
-          </div>
-          <div class="payout-divider"></div>
-          <div style="margin-top:16px;">
-            <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">Estimated Monthly Recovery</div>
-            <div class="payout-number">$650</div>
+
+          <div class="earn-divider"></div>
+
+          <div class="earn-summary">
+            <div class="earn-summary-label">The BotRev Difference</div>
+            <div class="earn-summary-copy">Every category above is actively happening on your site right now. BotRev's proprietary demand-based pricing algorithm ensures every interaction earns what it's worth — and that you have an independent record of all of it.</div>
           </div>
         </div>
       </div>
     </div>
   </section>
+
+  <!-- PUBLISHER QUOTE -->
+  <div class="quote-section">
+    <div class="quote-inner">
+      <div class="quote-mark">"</div>
+      <div class="quote-text">Publishers spent twenty years building content that fuels the internet. The AI economy is built on that same content. BotRev exists to make sure publishers are at the table — not just the raw material.</div>
+      <div class="quote-attr">BotRev · Publisher-First Content Intelligence · Chicago, IL</div>
+    </div>
+  </div>
 
   <!-- CTA -->
   <section class="cta-section">
     <div class="section-eyebrow" style="color:var(--green); margin-bottom:12px;">Get Started Today</div>
-    <h2>Start your free audit.</h2>
-    <p>No commitment. No cost. We show you the exact dollar value of your uncompensated bot traffic — then you decide.</p>
+    <h2>Find out what your<br>content is really worth.</h2>
+    <p>Free 14-day Content Intelligence Audit. No commitment, no cost. We show you the exact value of your AI traffic — then you decide what to do with it.</p>
     <a class="cta-email" href="#" onclick="openAuditForm(); return false;">
       → Request Your Free Audit
     </a>
@@ -652,15 +694,12 @@
       modal.style.display = 'none';
       document.body.style.overflow = '';
     }
-    // Close on backdrop click
     document.getElementById('auditModal').addEventListener('click', function(e) {
       if (e.target === this) closeAuditForm();
     });
-    // Close on Escape key
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') closeAuditForm();
     });
-    // Handle form submission
     document.getElementById('auditForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const btn = document.getElementById('auditSubmitBtn');
@@ -678,13 +717,11 @@
           document.getElementById('auditSuccess').style.display = 'block';
         } else {
           btn.textContent = 'Error — try again';
-          btn.disabled = false;
-          btn.style.opacity = '1';
+          btn.disabled = false; btn.style.opacity = '1';
         }
       } catch {
         btn.textContent = 'Error — try again';
-        btn.disabled = false;
-        btn.style.opacity = '1';
+        btn.disabled = false; btn.style.opacity = '1';
       }
     });
   </script>
