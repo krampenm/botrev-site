@@ -380,11 +380,16 @@
           style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; background:#fff; transition:border-color 0.15s;"
           onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
           <option value="">Select range…</option>
-          <option>Under 100K</option>
+          <option>Under 10K</option>
+          <option>10K – 50K</option>
+          <option>50K – 100K</option>
           <option>100K – 500K</option>
-          <option>500K – 2M</option>
-          <option>2M – 10M</option>
-          <option>10M+</option>
+          <option>500K – 1M</option>
+          <option>1M – 5M</option>
+          <option>5M – 10M</option>
+          <option>10M – 20M</option>
+          <option>20M – 50M</option>
+          <option>50M+</option>
         </select>
 
         <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Anything else?</label>
@@ -458,17 +463,144 @@
     </div>
   </section>
 
+  <!-- REVENUE CALCULATOR -->
+  <section class="section section-alt" id="calculator">
+    <div class="section-inner">
+      <div class="section-eyebrow">Revenue Estimator</div>
+      <h2 class="section-title">How much is your AI traffic worth?</h2>
+      <p class="section-sub">Enter your monthly pageviews and content vertical to see your estimated AI bot revenue. Results are based on real marketplace data at BotRev's $3.00 CPM floor rate.</p>
+
+      <div style="max-width:720px; margin:48px auto 0; background:#fff; border-radius:16px; border:1px solid var(--border); padding:40px; box-shadow:0 4px 24px rgba(30,58,95,0.08);">
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:32px;">
+
+          <div>
+            <label style="font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;">Monthly Pageviews</label>
+            <select id="calcPageviews" onchange="calcRevenue()"
+              style="width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:var(--text); outline:none; background:#fff; cursor:pointer;"
+              onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+              <option value="">Select range…</option>
+              <option value="50000">Under 100K</option>
+              <option value="300000">100K – 500K</option>
+              <option value="1250000">500K – 2M</option>
+              <option value="6000000">2M – 10M</option>
+              <option value="15000000">10M – 20M</option>
+              <option value="35000000">20M – 50M</option>
+              <option value="75000000">50M+</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;">Content Vertical</label>
+            <select id="calcVertical" onchange="calcRevenue()"
+              style="width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:var(--text); outline:none; background:#fff; cursor:pointer;"
+              onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
+              <option value="">Select vertical…</option>
+              <option value="2.2">Finance / Legal / Medical</option>
+              <option value="1.8">Technology / B2B</option>
+              <option value="1.4">News / Politics</option>
+              <option value="1.2">Lifestyle / Culture</option>
+              <option value="1.0">General / Mixed</option>
+              <option value="0.8">Entertainment / Sports</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="calcResults" style="display:none; border-top:1px solid var(--border); padding-top:32px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:28px;">
+
+            <div style="background:var(--surface-2); border-radius:12px; padding:24px; text-align:center;">
+              <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Est. Monthly Bot Requests</div>
+              <div id="calcRequests" style="font-family:'Syne',sans-serif; font-size:2rem; font-weight:800; color:var(--navy);"></div>
+              <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">AI crawls per month</div>
+            </div>
+
+            <div style="background:var(--green-tint); border-radius:12px; padding:24px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
+              <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--green-dim); margin-bottom:8px;">Est. Monthly Gross Revenue</div>
+              <div id="calcRevenue" style="font-family:'Syne',sans-serif; font-size:2rem; font-weight:800; color:var(--green-dim);"></div>
+              <div style="font-size:0.75rem; color:var(--green-dim); margin-top:4px;">at $3.00 CPM floor rate</div>
+            </div>
+          </div>
+
+          <div style="background:var(--navy); border-radius:10px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--light-muted); margin-bottom:4px;">This estimate is based on</div>
+              <div style="font-size:0.85rem; color:#fff;">typical AI bot-to-pageview ratios and marketplace floor CPM rates. Actual revenue varies based on your content's freshness, vertical demand, and AI company crawl patterns.</div>
+            </div>
+          </div>
+
+          <div style="text-align:center; margin-top:28px;">
+            <a href="#" onclick="openAuditForm(); return false;"
+              style="display:inline-block; padding:14px 36px; background:var(--green); color:#fff; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:0.95rem; text-decoration:none; letter-spacing:0.5px; transition:all 0.15s;"
+              onmouseover="this.style.background='var(--green-dim)'" onmouseout="this.style.background='var(--green)'">
+              → Get Your Free 7-Day Audit
+            </a>
+            <p style="font-size:0.75rem; color:var(--muted); margin-top:10px;">No commitment. Results in 48 hours.</p>
+          </div>
+        </div>
+
+        <div id="calcPlaceholder" style="text-align:center; padding:24px 0; color:var(--muted); font-size:0.9rem;">
+          Select your pageviews and vertical above to see your estimate.
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <script>
+    function calcRevenue() {
+      const pvVal = document.getElementById('calcPageviews').value;
+      const vertVal = document.getElementById('calcVertical').value;
+      if (!pvVal || !vertVal) return;
+
+      const pageviews = parseFloat(pvVal);
+      const multiplier = parseFloat(vertVal);
+
+      // Bot-to-pageview ratio: ~8% of pageviews are AI bot requests (conservative estimate)
+      const botRatio = 0.08;
+      const botRequests = Math.round(pageviews * botRatio);
+
+      // Revenue: (requests / 1000) * $3.00 CPM * vertical multiplier
+      const cpm = 3.00;
+      const grossRevenue = (botRequests / 1000) * cpm * multiplier;
+
+      // Format requests
+      let reqDisplay;
+      if (botRequests >= 1000000) {
+        reqDisplay = (botRequests / 1000000).toFixed(1) + 'M';
+      } else if (botRequests >= 1000) {
+        reqDisplay = Math.round(botRequests / 1000) + 'K';
+      } else {
+        reqDisplay = botRequests.toString();
+      }
+
+      // Format revenue
+      let revDisplay;
+      if (grossRevenue >= 1000) {
+        revDisplay = '$' + (grossRevenue / 1000).toFixed(1) + 'K';
+      } else {
+        revDisplay = '$' + Math.round(grossRevenue).toLocaleString();
+      }
+
+      document.getElementById('calcRequests').textContent = reqDisplay;
+      document.getElementById('calcRevenue').textContent = revDisplay;
+      document.getElementById('calcResults').style.display = 'block';
+      document.getElementById('calcPlaceholder').style.display = 'none';
+    }
+  </script>
+
   <!-- TRUST STRIP -->
   <div class="trust-strip">
     <div class="trust-inner">
       <div class="trust-stat">
         <div class="trust-val">7 Days</div>
-        <div class="trust-desc">To a complete content intelligence picture.</div>
+        <div class="trust-desc">To a complete content intelligence picture</div>
       </div>
       <div class="trust-div"></div>
       <div class="trust-stat">
         <div class="trust-val">1 Record</div>
-        <div class="trust-desc">One DNS record is all it takes to deploy.</div>
+        <div class="trust-desc">One DNS record is all it takes to deploy</div>
       </div>
       <div class="trust-div"></div>
       <div class="trust-stat">
@@ -488,6 +620,7 @@
     <div class="section-inner">
       <div class="section-eyebrow">The Process</div>
       <h2 class="section-title">From invisible AI traffic<br>to monthly earnings</h2>
+      <p class="section-sub">Four steps. No engineers needed. BotRev handles everything — you stay focused on publishing.</p>
       <div class="steps">
         <div class="step" data-n="STEP 01">
           <h3>Free Content Intelligence Audit</h3>
@@ -495,18 +628,18 @@
           <span class="step-tag">No signup required</span>
         </div>
         <div class="step" data-n="STEP 02">
-          <h3>"The Bot Wrapper"</h3>
-          <p>If you choose to proceed, deployment takes one DNS record change — typically five minutes. No plugin installs, no code changes, no harm to your human traffic.</p>
+          <h3>One-Line Deployment</h3>
+          <p>If you choose to proceed, deployment takes one DNS record change — typically five minutes. Works with every major platform. No plugin installs, no code changes, no harm to your human traffic.</p>
           <span class="step-tag">Works on any platform</span>
         </div>
         <div class="step" data-n="STEP 03">
-          <h3>Bot Yield Optimization</h3>
+          <h3>The Bot Wrapper</h3>
           <p>BotRev's proprietary demand-based pricing algorithm runs continuously in the background — classifying every AI interaction, optimizing the value of your content in real time, and managing your enrollment in the AI content licensing ecosystem on your behalf.</p>
           <span class="step-tag">Fully managed</span>
         </div>
         <div class="step" data-n="STEP 04">
           <h3>Monthly Earnings Statement</h3>
-          <p>Each month you receive a clear, unified earnings statement. One payment, full transparency.</p>
+          <p>Each month you receive a clear, unified earnings statement — every AI interaction logged, every dollar accounted for, independently verified by BotRev's own data. One payment, full transparency.</p>
           <span class="step-tag">Publisher-first reporting</span>
         </div>
       </div>
