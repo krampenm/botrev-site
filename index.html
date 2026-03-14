@@ -468,7 +468,7 @@
     <div class="section-inner">
       <div class="section-eyebrow">Revenue Estimator</div>
       <h2 class="section-title">How much is your AI traffic worth?</h2>
-      <p class="section-sub">Enter your monthly pageviews and content vertical to see your estimated AI bot revenue.</p>
+      <p class="section-sub">Enter your monthly pageviews and your current ad RPM to see your estimated AI bot revenue potential.</p>
 
       <div style="max-width:720px; margin:48px auto 0; background:#fff; border-radius:16px; border:1px solid var(--border); padding:40px; box-shadow:0 4px 24px rgba(30,58,95,0.08);">
 
@@ -491,18 +491,11 @@
           </div>
 
           <div>
-            <label style="font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;">Content Vertical</label>
-            <select id="calcVertical" onchange="calcRevenue()"
-              style="width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:var(--text); outline:none; background:#fff; cursor:pointer;"
+            <label style="font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;">Your Current Ad RPM ($)</label>
+            <input id="calcRpm" type="number" min="0.50" max="200" step="0.50" placeholder="e.g. 8.00" oninput="calcRevenue()"
+              style="width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:var(--text); outline:none; background:#fff;"
               onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
-              <option value="">Select vertical…</option>
-              <option value="2.2">Finance / Legal / Medical</option>
-              <option value="1.8">Technology / B2B</option>
-              <option value="1.4">News / Politics</option>
-              <option value="1.2">Lifestyle / Culture</option>
-              <option value="1.0">General / Mixed</option>
-              <option value="0.8">Entertainment / Sports</option>
-            </select>
+            <div style="font-size:0.72rem; color:var(--muted); margin-top:5px;">Revenue per 1,000 human pageviews. Find this in your ad dashboard.</div>
           </div>
         </div>
 
@@ -519,7 +512,7 @@
             <div style="background:var(--green-tint); border-radius:12px; padding:24px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
               <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--green-dim); margin-bottom:8px;">Est. Monthly Gross Revenue</div>
               <div id="calcRevenue" style="font-family:'Syne',sans-serif; font-size:2rem; font-weight:800; color:var(--green-dim);"></div>
-              <div style="font-size:0.75rem; color:var(--green-dim); margin-top:4px;">at $3.00 CPM floor rate</div>
+              <div style="font-size:0.75rem; color:var(--green-dim); margin-top:4px;">estimated monthly earnings</div>
             </div>
           </div>
 
@@ -534,7 +527,7 @@
         </div>
 
         <div id="calcPlaceholder" style="text-align:center; padding:24px 0; color:var(--muted); font-size:0.9rem;">
-          Select your pageviews and vertical above to see your estimate.
+          Select your pageviews and enter your RPM above to see your estimate.
         </div>
 
       </div>
@@ -544,19 +537,19 @@
   <script>
     function calcRevenue() {
       const pvVal = document.getElementById('calcPageviews').value;
-      const vertVal = document.getElementById('calcVertical').value;
-      if (!pvVal || !vertVal) return;
+      const rpmVal = document.getElementById('calcRpm').value;
+      if (!pvVal || !rpmVal || parseFloat(rpmVal) <= 0) return;
 
       const pageviews = parseFloat(pvVal);
-      const multiplier = parseFloat(vertVal);
+      const rpm = parseFloat(rpmVal);
 
-      // Bot-to-pageview ratio: ~8% of pageviews are AI bot requests (conservative estimate)
-      const botRatio = 0.08;
-      const botRequests = Math.round(pageviews * botRatio);
+      // Bot-to-human ratio: 1 AI bot request per 31 human pageviews
+      // Source: TollBit State of the Bots Q4 2025
+      const botRequests = Math.round(pageviews / 31);
 
-      // Revenue: (requests / 1000) * $3.00 CPM * vertical multiplier
-      const cpm = 3.00;
-      const grossRevenue = (botRequests / 1000) * cpm * multiplier;
+      // Revenue: (bot requests / 1000) * publisher RPM
+      // Uses publisher's own RPM as the per-thousand rate — their content value
+      const grossRevenue = (botRequests / 1000) * rpm;
 
       // Format requests
       let reqDisplay;
