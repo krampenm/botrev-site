@@ -476,18 +476,13 @@
 
           <div>
             <label style="font-family:'DM Mono',monospace; font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px;">Monthly Pageviews</label>
-            <select id="calcPageviews" onchange="calcRevenue()"
-              style="width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:var(--text); outline:none; background:#fff; cursor:pointer;"
-              onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border)'">
-              <option value="">Select range…</option>
-              <option value="50000">Under 100K</option>
-              <option value="300000">100K – 500K</option>
-              <option value="1250000">500K – 2M</option>
-              <option value="6000000">2M – 10M</option>
-              <option value="15000000">10M – 20M</option>
-              <option value="35000000">20M – 50M</option>
-              <option value="75000000">50M+</option>
-            </select>
+            <div id="calcPageviewsDisplay" style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:800; color:var(--navy); margin-bottom:12px;">1,000,000</div>
+            <input id="calcPageviews" type="range" min="0" max="100000000" step="50000" value="1000000"
+              oninput="updateSliderDisplay(); calcRevenue();"
+              style="width:100%; height:6px; border-radius:3px; outline:none; cursor:pointer; accent-color:#10B981; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; font-family:'DM Mono',monospace; font-size:0.6rem; color:var(--muted); margin-top:4px;">
+              <span>0</span><span>25M</span><span>50M</span><span>75M</span><span>100M</span>
+            </div>
           </div>
 
           <div>
@@ -535,10 +530,23 @@
   </section>
 
   <script>
+    function updateSliderDisplay() {
+      const val = parseInt(document.getElementById('calcPageviews').value);
+      let display;
+      if (val >= 1000000) {
+        display = (val / 1000000).toFixed(val % 1000000 === 0 ? 0 : 1) + 'M';
+      } else if (val >= 1000) {
+        display = Math.round(val / 1000) + 'K';
+      } else {
+        display = val.toLocaleString();
+      }
+      document.getElementById('calcPageviewsDisplay').textContent = display;
+    }
+
     function calcRevenue() {
       const pvVal = document.getElementById('calcPageviews').value;
       const rpmVal = document.getElementById('calcRpm').value;
-      if (!pvVal || !rpmVal || parseFloat(rpmVal) <= 0) return;
+      if (!rpmVal || parseFloat(rpmVal) <= 0) return;
 
       const pageviews = parseFloat(pvVal);
       const rpm = parseFloat(rpmVal);
