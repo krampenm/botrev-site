@@ -21,6 +21,8 @@
       --green-dim:   #059669;
       --green-tint:  #ECFDF5;
       --green-deep:  #064E3B;
+      --amber:       #F59E0B;
+      --amber-tint:  #FFFBEB;
       --text:        #1E3A5F;
       --muted:       #5A7FA8;
       --light-muted: #A8C5E8;
@@ -137,6 +139,7 @@
     .sig-t2 { color: #60A5FA; }
     .sig-t3 { color: #FBBF24; }
     .sig-t4 { color: var(--light-muted); }
+    .sig-t5 { color: var(--amber); }
 
     /* ── TRUST STRIP ── */
     .trust-strip {
@@ -209,11 +212,13 @@
       box-shadow: 0 2px 8px rgba(30,58,95,0.06); transition: transform 0.2s, box-shadow 0.2s;
     }
     .feature-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(30,58,95,0.12); }
+    .feature-card.feature-amber { border-top-color: var(--amber); }
     .feature-icon {
       width: 44px; height: 44px; background: var(--green-tint);
       border-radius: 10px; display: flex; align-items: center; justify-content: center;
       font-size: 1.3rem; margin-bottom: 16px;
     }
+    .feature-icon.amber-icon { background: var(--amber-tint); }
     .feature-card h3 { font-size: 1.05rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
     .feature-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
     .feature-card .feature-tag {
@@ -221,6 +226,10 @@
       font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px;
       text-transform: uppercase; color: var(--muted);
       border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px;
+    }
+    .feature-card .feature-tag.amber-tag {
+      color: var(--amber); border-color: var(--amber);
+      background: var(--amber-tint);
     }
 
     /* ── HOW YOU EARN ── */
@@ -353,7 +362,7 @@
       <button onclick="closeAuditForm()" style="position:absolute; top:16px; right:20px; background:none; border:none; cursor:pointer; font-size:1.4rem; color:#5A7FA8; line-height:1;">×</button>
       <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:#10B981; margin-bottom:10px;">Free · No Commitment</div>
       <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:800; color:#1E3A5F; margin-bottom:6px;">Start Your Free Audit</h2>
-      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we'll reach out within 24 hours to kick off your free Content Intelligence Audit.</p>
+      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we'll reach out within 24 hours to kick off your free 7-day Content Intelligence Audit.</p>
 
       <form id="auditForm" action="https://formspree.io/f/mjgagjbl" method="POST">
         <input type="hidden" name="_subject" value="New BotRev Audit Request">
@@ -408,7 +417,7 @@
       <div id="auditSuccess" style="display:none; text-align:center; padding:20px 0;">
         <div style="font-size:2.5rem; margin-bottom:12px;">✓</div>
         <h3 style="font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:700; color:#1E3A5F; margin-bottom:8px;">Audit Request Received</h3>
-        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly to kick off your free Content Intelligence Audit.</p>
+        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly to kick off your free 7-day Content Intelligence Audit.</p>
       </div>
     </div>
   </div>
@@ -430,7 +439,7 @@
         <div class="tier-row">
           <div>
             <div class="tier-label">Premium AI Agents</div>
-            <div class="tier-examples">OpenAI · Claude · Perplexity · Gemini</div>
+            <div class="tier-examples">ChatGPT · Claude · Perplexity · Gemini</div>
           </div>
           <div class="tier-signal sig-t1">████████ HIGH</div>
         </div>
@@ -454,6 +463,13 @@
             <div class="tier-examples">Unidentified agents · Utility bots</div>
           </div>
           <div class="tier-signal sig-t4">██░░░░░░ LOW</div>
+        </div>
+        <div class="tier-row">
+          <div>
+            <div class="tier-label">AI Training Crawlers</div>
+            <div class="tier-examples">Model training · Data collection · LLM ingestion</div>
+          </div>
+          <div class="tier-signal sig-t5">⚡ TRAINING DEALS</div>
         </div>
         <div style="margin-top:20px; padding-top:16px; border-top:1px solid rgba(168,197,232,0.12);">
           <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:6px;">What this means for you</div>
@@ -504,7 +520,7 @@
             </div>
 
             <div style="background:var(--green-tint); border-radius:12px; padding:24px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
-              <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--green-dim); margin-bottom:8px;">Est. Monthly Gross Revenue</div>
+              <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:var(--green-dim); margin-bottom:8px;">Est. Monthly Net Revenue</div>
               <div id="calcRevenue" style="font-family:'Syne',sans-serif; font-size:2rem; font-weight:800; color:var(--green-dim);"></div>
               <div style="font-size:0.75rem; color:var(--green-dim); margin-top:4px;">estimated monthly earnings</div>
             </div>
@@ -546,16 +562,18 @@
       const rpmVal = document.getElementById('calcRpm').value;
       if (!rpmVal || parseFloat(rpmVal) <= 0) return;
 
-      const pageviews = parseFloat(pvVal);
-      const rpm = parseFloat(rpmVal);
+      const pageviews   = parseFloat(pvVal);
+      const rpm         = parseFloat(rpmVal);
 
       // Bot-to-human ratio: 1 AI bot request per 31 human pageviews
       // Source: TollBit State of the Bots Q4 2025
       const botRequests = Math.round(pageviews / 31);
 
-      // Revenue: (bot requests / 1000) * publisher RPM
-      // Uses publisher's own RPM as the per-thousand rate — their content value
+      // Gross revenue: (bot requests / 1000) * publisher RPM
       const grossRevenue = (botRequests / 1000) * rpm;
+
+      // Net revenue: publisher share after BotRev management fee
+      const netRevenue = grossRevenue * 0.70;
 
       // Format requests
       let reqDisplay;
@@ -569,10 +587,10 @@
 
       // Format revenue
       let revDisplay;
-      if (grossRevenue >= 1000) {
-        revDisplay = '$' + (grossRevenue / 1000).toFixed(1) + 'K';
+      if (netRevenue >= 1000) {
+        revDisplay = '$' + (netRevenue / 1000).toFixed(1) + 'K';
       } else {
-        revDisplay = '$' + Math.round(grossRevenue).toLocaleString();
+        revDisplay = '$' + Math.round(netRevenue).toLocaleString();
       }
 
       document.getElementById('calcRequests').textContent = reqDisplay;
@@ -591,8 +609,8 @@
       </div>
       <div class="trust-div"></div>
       <div class="trust-stat">
-        <div class="trust-val">1 Record</div>
-        <div class="trust-desc">One DNS record is all it takes to deploy</div>
+        <div class="trust-val">1 Step</div>
+        <div class="trust-desc">One simple setup is all it takes to deploy</div>
       </div>
       <div class="trust-div"></div>
       <div class="trust-stat">
@@ -614,26 +632,31 @@
       <h2 class="section-title">From invisible AI traffic<br>to monthly earnings</h2>
       <p class="section-sub">Four steps. No engineers needed. BotRev handles everything — you stay focused on publishing.</p>
       <div class="steps">
+
         <div class="step" data-n="STEP 01">
-          <h3>Free Content Intelligence Audit</h3>
-          <p>We analyze 7 days of AI activity on your site — identifying every agent type visiting your content, how often, and what that activity is worth. You'll see a clear picture of your content's value in the AI economy before you commit to anything.</p>
-          <span class="step-tag">No signup required</span>
-        </div>
-        <div class="step" data-n="STEP 02">
-          <h3>One-Line Deployment</h3>
-          <p>If you choose to proceed, deployment takes one DNS record change — typically five minutes. Works with every major platform. No plugin installs, no code changes, no harm to your human traffic.</p>
+          <h3>Quick One-Time Setup</h3>
+          <p>Getting started takes just a few minutes and a single configuration change on your site — no code, no plugins, no engineers required. Works with every major publishing platform, CMS, and web host. Your readers never notice a thing.</p>
           <span class="step-tag">Works on any platform</span>
         </div>
+
+        <div class="step" data-n="STEP 02">
+          <h3>Free 7-Day Content Intelligence Audit</h3>
+          <p>See results immediately. BotRev analyzes AI activity across your site — identifying every agent type visiting your content, how often, and what that activity is worth. You get a clear, data-backed picture of your content's value in the AI economy before you commit to anything.</p>
+          <span class="step-tag">No signup required</span>
+        </div>
+
         <div class="step" data-n="STEP 03">
           <h3>The Bot Wrapper</h3>
           <p>BotRev's proprietary demand-based pricing algorithm runs continuously in the background — classifying every AI interaction, optimizing the value of your content in real time, and managing your enrollment in the AI content licensing ecosystem on your behalf.</p>
           <span class="step-tag">Fully managed</span>
         </div>
+
         <div class="step" data-n="STEP 04">
           <h3>Monthly Earnings Statement</h3>
           <p>Each month you receive a clear, unified earnings statement — every AI interaction logged, every dollar accounted for, independently verified by BotRev's own data. One payment, full transparency.</p>
           <span class="step-tag">Publisher-first reporting</span>
         </div>
+
       </div>
     </div>
   </section>
@@ -643,44 +666,59 @@
     <div class="section-inner">
       <div class="section-eyebrow">The Platform</div>
       <h2 class="section-title">Built for online content owners<br>in the age of AI</h2>
-      <p class="section-sub">BotRev gives domain owners complete content intelligence and earnings infrastructure.</p>
+      <p class="section-sub">BotRev gives domain owners complete content intelligence and earnings infrastructure — including a new revenue stream most publishers don't even know exists.</p>
       <div class="features">
+
         <div class="feature-card">
           <div class="feature-icon">⚡</div>
           <h3>AI Traffic Detection</h3>
           <p>BotRev identifies every AI agent visiting your site — from the largest language model companies to headless automation tools — and classifies each one by type, intent, and content value signal. All invisible to your readers.</p>
           <span class="feature-tag">Always on</span>
         </div>
+
         <div class="feature-card">
           <div class="feature-icon">📈</div>
           <h3>Proprietary Demand-Based Pricing</h3>
           <p>BotRev's proprietary algorithm dynamically optimizes the value of your content in real time based on demand signals — so when AI interest in your content spikes, your earnings follow automatically. No manual rate-setting required.</p>
           <span class="feature-tag">Fully automated</span>
         </div>
+
         <div class="feature-card">
           <div class="feature-icon">🛡️</div>
           <h3>Independent Audit Layer</h3>
           <p>BotRev maintains its own independent log of every AI interaction on your content — giving you a verified record that isn't controlled by any marketplace or AI company. You own your data. Always.</p>
           <span class="feature-tag">Publisher-owned data</span>
         </div>
+
+        <!-- NEW: Training Deals -->
+        <div class="feature-card feature-amber">
+          <div class="feature-icon amber-icon">🤝</div>
+          <h3>BotRev Training Deals</h3>
+          <p>Some AI companies send crawlers specifically to collect content for model training — a category most monetization platforms ignore entirely. BotRev detects this traffic, quantifies it, and connects publishers directly with LLM companies for licensing agreements. A revenue stream no one else is capturing for you.</p>
+          <span class="feature-tag amber-tag">New revenue stream</span>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Publisher Dashboard</h3>
+          <p>Real-time AI traffic data, earnings tracking, and content performance — in one clean, easy-to-read dashboard. No training required. Log in with your Network ID and Access Key and see results immediately.</p>
+          <span class="feature-tag">Live data</span>
+        </div>
+
         <div class="feature-card">
           <div class="feature-icon">🔒</div>
           <h3>Content Intelligence Reports</h3>
           <p>Learn which of your articles, topics, and content formats attract the most AI attention — and what that attention is worth. BotRev turns your traffic data into editorial insights you can actually act on.</p>
           <span class="feature-tag">Coming soon</span>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">📊</div>
-          <h3>Publisher Dashboard</h3>
-          <p>Real-time AI traffic data, earnings tracking, and content performance — in one clean, easy-to-read dashboard. No training required. Log in with your Network ID and Access Key.</p>
-          <span class="feature-tag">Live data</span>
-        </div>
+
         <div class="feature-card">
           <div class="feature-icon">📋</div>
           <h3>Bot Extraction Optimization</h3>
           <p>BEO is the machine-readable equivalent of SEO. BotRev helps structure your content so AI agents can find it, cite it, and credit your brand — giving you visibility inside AI responses, not just search results.</p>
           <span class="feature-tag">New discipline</span>
         </div>
+
       </div>
     </div>
   </section>
@@ -700,7 +738,7 @@
               <div class="earn-dot">✓</div>
               <div>
                 <h4>The audit is always free</h4>
-                <p>We show you the full picture of your AI traffic value before you make any decision. No credit card, no commitment, no pressure.</p>
+                <p>We show you the full 7-day picture of your AI traffic value before you make any decision. No credit card, no commitment, no pressure. See results immediately.</p>
               </div>
             </div>
             <div class="earn-point">
@@ -758,6 +796,13 @@
             </div>
             <div class="earn-row-signal" style="border-color:#5A7FA8; color:#5A7FA8;">TRACKED</div>
           </div>
+          <div class="earn-row">
+            <div>
+              <div class="earn-row-label">AI Training Crawlers ⚡</div>
+              <div class="earn-row-desc">Bots collecting your content specifically for LLM model training. BotRev Training Deals connects you directly with AI companies for licensing agreements — a category most platforms leave on the table.</div>
+            </div>
+            <div class="earn-row-signal" style="border-color:#F59E0B; color:#F59E0B;">TRAINING DEALS</div>
+          </div>
           <div class="earn-divider"></div>
           <div class="earn-summary">
             <div class="earn-summary-label">The BotRev Difference</div>
@@ -774,7 +819,7 @@
     <div class="quote-inner">
       <div class="quote-mark">"</div>
       <div class="quote-text">Publishers spent twenty years building content that fuels the internet. The AI economy is built on that same content. BotRev exists to make sure publishers are at the table — not just the raw material.</div>
-      <div class="quote-attr">BotRev · Publisher-First Content Intelligence · Chicago, IL</div>
+      <div class="quote-attr">Matt Krampen · Founder, BotRev · Chicago, IL</div>
     </div>
   </div>
 
