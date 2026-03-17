@@ -143,13 +143,13 @@
 
     /* ── TRUST STRIP ── */
     .trust-strip {
-      background: var(--navy); padding: 20px 32px;
+      background: var(--navy); padding: 28px 32px;
       border-bottom: 3px solid var(--green);
     }
     .trust-inner {
-      max-width: 1200px; margin: auto;
-      display: flex; justify-content: space-around; align-items: center;
-      gap: 24px; flex-wrap: wrap;
+      max-width: 1100px; margin: auto;
+      display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+      align-items: center; gap: 0;
     }
     .trust-stat { text-align: center; }
     .trust-val {
@@ -401,7 +401,7 @@
   <section class="hero">
     <div class="hero-inner">
       <div>
-        <div class="hero-eyebrow">Anthropic's Claude crawled your content 43,214 times for every visitor it sent back.</div>
+        <div class="hero-eyebrow">Your content feeds the AI economy. Time to get paid.</div>
         <h1>Your content is<br>worth <em>more</em> than<br>you're earning.</h1>
         <p class="hero-sub">1 in every 31 visitors to your site is now an AI bot — up from 1 in 200 just one year ago. They're consuming your content, training their models, and building billion-dollar products on your work. BotRev identifies that activity, quantifies its value, and manages your earnings.</p>
         <div class="hero-actions">
@@ -493,13 +493,6 @@
           <h3>Proprietary Demand-Based Pricing</h3>
           <p>BotRev's proprietary algorithm dynamically optimizes the value of your content in real time based on demand signals — so when AI interest in your content spikes, your earnings follow automatically. No manual rate-setting required.</p>
           <span class="feature-tag">Fully automated</span>
-        </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">🛡️</div>
-          <h3>Independent Audit Layer</h3>
-          <p>BotRev maintains its own independent log of every AI interaction on your content — giving you a verified record that isn't controlled by any marketplace or AI company. You own your data. Always.</p>
-          <span class="feature-tag">Publisher-owned data</span>
         </div>
 
         <!-- NEW: Training Deals -->
