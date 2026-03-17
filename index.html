@@ -75,7 +75,7 @@
     /* ── HERO ── */
     .hero {
       background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 60%, #1a4f7a 100%);
-      padding: 96px 32px 80px;
+      padding: 64px 32px 56px;
       position: relative; overflow: hidden;
     }
     .hero::before {
@@ -86,7 +86,6 @@
     }
     .hero-inner {
       max-width: 1200px; margin: auto; position: relative; z-index: 1;
-      max-width: 720px;
     }
     .hero-eyebrow {
       font-family: var(--font-mono); font-size: 0.65rem;
@@ -96,11 +95,12 @@
     .hero h1 {
       font-size: clamp(2.4rem, 4vw, 3.4rem); font-weight: 800;
       line-height: 1.1; color: #fff; margin-bottom: 20px;
+      max-width: 680px;
     }
     .hero h1 em { font-style: normal; color: var(--green); }
     .hero-sub {
       font-size: 1.05rem; line-height: 1.7; color: var(--light-muted);
-      margin-bottom: 36px; max-width: 460px;
+      margin-bottom: 36px; max-width: 560px;
     }
     .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .btn-hero-primary {
@@ -143,7 +143,7 @@
 
     /* ── TRUST STRIP ── */
     .trust-strip {
-      background: var(--navy); padding: 28px 32px;
+      background: var(--navy); padding: 24px 32px;
       border-bottom: 3px solid var(--green);
     }
     .trust-inner {
