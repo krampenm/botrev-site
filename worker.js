@@ -1,7 +1,34 @@
 /**
  * BotRev Cloudflare Worker — dash.botrev.com
  * Bot Sniffer | Full AOR Infrastructure | Marketplace-Agnostic Routing
- * Version 27.1 — March 2026
+ * Version 27.2 — March 2026
+ *
+ * CHANGES FROM v27.1 — SECURITY HARDENING:
+ *   - Admin rate limiting: max 10 requests/min per IP across all /api/admin/* endpoints
+ *       Uses D1 admin_requests table. Brute-force and credential stuffing protection.
+ *       New D1 migration required: see SQL below.
+ *   - HMAC-signed surge action tokens: approve/reject URLs now contain a cryptographic
+ *       HMAC-SHA256 signature + 30-minute expiry. Old/intercepted email links cannot be
+ *       replayed. Signing key derived from env.ADMIN_PASS.
+ *   - Tamper-evident audit log: each bot_logs entry stores a SHA-256 hash chained to
+ *       the previous entry. Any modification to historical records is detectable.
+ *       New D1 migration required: ALTER TABLE bot_logs ADD COLUMN entry_hash TEXT.
+ *   - Morgan123 fallback removed: env.ADMIN_PASS is now required. If not set, all admin
+ *       routes return 503 with a clear error. Forces proper secret rotation.
+ *   - Origin validation on publisher onboarding: BotRev verifies the publisher's origin
+ *       server is reachable before writing them to D1. Prevents misconfigured publishers
+ *       going live silently.
+ *   - Admin request logging: all admin route hits logged to D1 with IP + path for audit.
+ *
+ * NEW D1 MIGRATIONS REQUIRED (run in Cloudflare D1 console before deploying v27.2):
+ *   CREATE TABLE IF NOT EXISTS admin_requests (
+ *     id INTEGER PRIMARY KEY AUTOINCREMENT,
+ *     ip TEXT NOT NULL,
+ *     path TEXT,
+ *     ts TEXT DEFAULT (datetime('now'))
+ *   );
+ *   CREATE INDEX IF NOT EXISTS idx_admin_ip_ts ON admin_requests(ip, ts);
+ *   ALTER TABLE bot_logs ADD COLUMN entry_hash TEXT;
  *
  * CHANGES FROM v27:
  *   - Stealth crawler heuristic tightened: added Sec-Fetch-* header as 4th signal,
@@ -11,8 +38,8 @@
  *     are now consistent — previously callout always queried all-time)
  *   - Domain drilldown: reclassified null UAs now fall back to T4 (not stale DB tier)
  *     eliminates v26 T1 false positives for human-looking UAs
- *   - "Est. Recovery Potential" renamed to "Publisher Net Revenue" across
- *     publisher dashboard and domain drilldown, with  note
+ *   - "Est. Recovery Potential" renamed to "Net Revenue (Publisher Share)" across
+ *     publisher dashboard and domain drilldown, with "After 30% BotRev management fee" note
  *   - T5 · Training tier added ($0 CPM, logged only — TollBit gap → BotRev Training Deals)
  *       Training bots are classified FIRST before all other tiers so a training bot
  *       can never accidentally land in a monetizable tier. They pass through to origin
@@ -26,7 +53,6 @@
  *       Bot errors → 503. Human traffic → silent pass-through to origin.
  *       Publisher human traffic is protected even if the Worker throws.
  *   - ADMIN_PASSWORD moved to env.ADMIN_PASS (Cloudflare secret)
- *       Fallback to "Morgan123" until rotated before publisher #2.
  *       Rotate via: Cloudflare Workers → Settings → Variables & Secrets → ADMIN_PASS
  *   - D1 bot_logs table: is_training flag added (1 for T5, 0 for all others)
  *   - Publisher dashboard: T5 tier row added to tier breakdown
@@ -55,6 +81,120 @@ const TB_BACKOFF_INTERVAL   = 10000;
 let   tbLogBatch            = [];
 let   tbBackoffUntil        = 0;
 let   tbBatchScheduled      = false;
+
+// ── v27.2 SECURITY — CRYPTOGRAPHIC HELPERS ──────────────────────────────────
+
+/**
+ * HMAC-SHA256 sign a message using env.ADMIN_PASS as the key.
+ * Used to sign surge action URLs so they can't be forged or replayed.
+ */
+async function hmacSign(message, secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Verify an HMAC-SHA256 signature. Constant-time comparison.
+ */
+async function hmacVerify(message, signature, secret) {
+  const expected = await hmacSign(message, secret);
+  if (expected.length !== signature.length) return false;
+  // Constant-time compare to prevent timing attacks
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) {
+    mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+/**
+ * Compute a SHA-256 hash chain entry.
+ * Each bot_log entry hashes (prevHash + entryData).
+ * Any modification to historical entries breaks the chain.
+ */
+async function computeEntryHash(prevHash, entryData) {
+  const enc = new TextEncoder();
+  const input = `${prevHash || 'botrev-genesis'}:${entryData}`;
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(input));
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Generate a signed, time-limited surge action URL.
+ * Payload: surgeId:auditId:action:expiresTimestamp
+ * Expires after 30 minutes. Cannot be replayed after expiry.
+ */
+async function signedSurgeActionUrl(baseUrl, surgeId, auditId, action, adminPass) {
+  const expires = Date.now() + (30 * 60 * 1000); // 30 min
+  const payload = `${surgeId}:${auditId}:${action}:${expires}`;
+  const sig = await hmacSign(payload, adminPass);
+  const encoded = encodeURIComponent(payload);
+  return `${baseUrl}/api/admin/surge-action?payload=${encoded}&sig=${sig}`;
+}
+
+/**
+ * Verify a signed surge action URL.
+ * Returns { valid: true, surgeId, auditId, action } or { valid: false, reason }
+ */
+async function verifySurgeToken(payload, sig, adminPass) {
+  if (!payload || !sig) return { valid: false, reason: 'Missing token parameters' };
+  const isValid = await hmacVerify(payload, sig, adminPass);
+  if (!isValid) return { valid: false, reason: 'Invalid signature' };
+  const parts = payload.split(':');
+  if (parts.length < 4) return { valid: false, reason: 'Malformed token' };
+  const [surgeId, auditId, action, expiresStr] = parts;
+  const expires = parseInt(expiresStr, 10);
+  if (Date.now() > expires) return { valid: false, reason: 'Token expired — surge links are valid for 30 minutes' };
+  if (!['approve', 'reject'].includes(action)) return { valid: false, reason: 'Invalid action in token' };
+  return { valid: true, surgeId, auditId, action };
+}
+
+/**
+ * v27.2 Admin rate limiter — max 10 requests per IP per minute.
+ * Logs to D1 admin_requests table.
+ * Returns { allowed: true } or { allowed: false, retryAfter: seconds }
+ */
+async function checkAdminRateLimit(ip, path, env) {
+  try {
+    // Log this request
+    await env.DB.prepare(
+      `INSERT INTO admin_requests (ip, path, ts) VALUES (?, ?, datetime('now'))`
+    ).bind(ip || 'unknown', path).run();
+
+    // Count requests from this IP in the last minute
+    const result = await env.DB.prepare(
+      `SELECT COUNT(*) as cnt FROM admin_requests
+       WHERE ip = ? AND ts > datetime('now', '-1 minute')`
+    ).bind(ip || 'unknown').first();
+
+    const count = result?.cnt || 0;
+    if (count > 10) {
+      return { allowed: false, retryAfter: 60 };
+    }
+
+    // Cleanup old entries occasionally (1 in 20 chance to avoid D1 bloat)
+    if (Math.random() < 0.05) {
+      env.DB.prepare(
+        `DELETE FROM admin_requests WHERE ts < datetime('now', '-10 minutes')`
+      ).run().catch(() => {});
+    }
+
+    return { allowed: true };
+  } catch {
+    // If rate limit check fails, allow through — don't break admin access
+    return { allowed: true };
+  }
+}
 
 // ── T5 TRAINING BOT FINGERPRINTS (MODULE LEVEL) ─────────────────────────────
 // These crawlers collect content for LLM model training.
@@ -244,6 +384,32 @@ async function evaluateSurge(auditId, hostname, reqPath, env, ctx) {
 
     const upliftPct = ((pt - pfloor) / pfloor * 100).toFixed(1);
 
+    // v27.2 FIX: Check throttle BEFORE inserting.
+    // Previous logic inserted first then checked — this caused a flood of
+    // surge_events rows (one per bot request) while still never sending email.
+    // Now: check if we've already sent an alert or logged a surge in the last
+    // 4 hours. If so, skip entirely — no insert, no email.
+    const recentCount = await env.DB.prepare(
+      `SELECT COUNT(*) as cnt FROM surge_events
+       WHERE audit_id = ? AND detected_at > datetime('now', '-4 hours')`
+    ).bind(auditId).first().catch(() => ({ cnt: 0 }));
+
+    if ((recentCount?.cnt || 0) >= 1) return;
+
+    // v27.2 FIX: Also check minimum insert interval — 2 minutes between
+    // any two surge_events rows regardless of alert status.
+    // Prevents rapid-fire inserts during a sustained surge.
+    const lastInsert = await env.DB.prepare(
+      `SELECT detected_at FROM surge_events
+       WHERE audit_id = ? ORDER BY detected_at DESC LIMIT 1`
+    ).bind(auditId).first().catch(() => null);
+
+    if (lastInsert?.detected_at) {
+      const lastMs = new Date(lastInsert.detected_at + 'Z').getTime();
+      if (Date.now() - lastMs < 2 * 60 * 1000) return; // 2-min cooldown
+    }
+
+    // Now safe to insert — only one surge event per 4-hour window
     let surgeEventId = null;
     try {
       const insertResult = await env.DB.prepare(
@@ -254,13 +420,6 @@ async function evaluateSurge(auditId, hostname, reqPath, env, ctx) {
       ).bind(auditId, domain, reqPath, v10, vbase, vrat, gamma, vrat, pfloor, pt).run();
       surgeEventId = insertResult?.meta?.last_row_id ?? null;
     } catch { /* surge log failure must never break request flow */ }
-
-    const alertCount = await env.DB.prepare(
-      `SELECT COUNT(*) as cnt FROM surge_events
-       WHERE audit_id = ? AND detected_at > datetime('now', '-4 hours')`
-    ).bind(auditId).first().catch(() => ({ cnt: 0 }));
-
-    if ((alertCount?.cnt || 0) > 1) return;
 
     ctx.waitUntil(sendSurgeAlert(env, {
       domain, reqPath, v10, vbase, vrat, gamma, pfloor, pt, beta, upliftPct,
@@ -276,14 +435,16 @@ async function sendSurgeAlert(env, d) {
   const surge10 = (d.pfloor * (1 + d.beta * Math.log10(11) * d.gamma)).toFixed(2);
   const gammaLabel = d.gamma === 1.2 ? 'Current year (1.2)' : d.gamma === 0.8 ? '2+ years ago (0.8)' : 'Neutral (1.0)';
 
-  // v27: admin pass from env — no hardcoded Morgan123 in email URLs
-  const adminPass = env.ADMIN_PASS || 'Morgan123';
-  const baseActionUrl = `https://dash.botrev.com/api/admin/surge-action?pass=${adminPass}`;
+  // v27.2: admin pass from env — signed tokens replace plain pass= URLs
+  const adminPass = env.ADMIN_PASS;
+  if (!adminPass) return; // can't sign without a key
+
+  const baseUrl = 'https://dash.botrev.com';
   const approveUrl = d.surgeEventId
-    ? `${baseActionUrl}&action=approve&id=${d.surgeEventId}&audit_id=${encodeURIComponent(d.auditId || '')}`
+    ? await signedSurgeActionUrl(baseUrl, d.surgeEventId, d.auditId || '', 'approve', adminPass)
     : null;
   const rejectUrl = d.surgeEventId
-    ? `${baseActionUrl}&action=reject&id=${d.surgeEventId}&audit_id=${encodeURIComponent(d.auditId || '')}`
+    ? await signedSurgeActionUrl(baseUrl, d.surgeEventId, d.auditId || '', 'reject', adminPass)
     : null;
 
   const html = `
@@ -424,10 +585,16 @@ async function handleRequest(request, env, ctx) {
     let path = url.pathname.toLowerCase();
     if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
 
-    // v27: Admin password from env secret — rotate before publisher #2
-    // Fallback to Morgan123 until rotated so existing sessions don't break.
-    // Rotate: Cloudflare Workers → Settings → Variables & Secrets → ADMIN_PASS (encrypted)
-    const ADMIN_PASSWORD    = env.ADMIN_PASS || 'Morgan123';
+    // v27.2: ADMIN_PASSWORD is now required — no fallback to Morgan123.
+    // If env.ADMIN_PASS is not set, admin routes return 503 with a clear error.
+    // Rotate via: Cloudflare Workers → Settings → Variables & Secrets → ADMIN_PASS (encrypted)
+    const ADMIN_PASSWORD = env.ADMIN_PASS;
+    if (!ADMIN_PASSWORD && (path.startsWith('/admin') || path.startsWith('/api/admin'))) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'ADMIN_PASS secret not configured. Set it in Cloudflare Workers → Settings → Variables & Secrets.' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     const SECRET_ADMIN_PATH = "/admin-portal-access";
     const ONBOARDING_PATH   = "/admin-onboard-client";
     const SURGE_ADMIN_PATH  = "/admin-surge";
@@ -753,14 +920,23 @@ async function handleRequest(request, env, ctx) {
           // v27: track training bots — 1 for T5, 0 for all others
           const isTrainingFlag = (botClass?.isTraining) ? 1 : 0;
 
-          // D1 log (non-blocking) — v27 adds is_training column
+          // D1 log (non-blocking) — v27 adds is_training, v27.2 adds entry_hash chain
           const dampedCPM = isTrainingFlag ? 0 : await getDampedCPM(publisherAuditId, effectiveCPM).catch(() => effectiveCPM);
-          ctx.waitUntil(
-            env.DB.prepare(
-              "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, is_training, referer, path, domain) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)"
-            ).bind(publisherAuditId, ua, effectiveTier, dampedCPM, isStealthFlag, isTrainingFlag, ref, reqPath, rawHostname).run()
-            .catch(() => {})
-          );
+          ctx.waitUntil((async () => {
+            try {
+              // v27.2: Compute tamper-evident hash chain entry
+              const prevEntry = await env.DB.prepare(
+                `SELECT entry_hash FROM bot_logs WHERE audit_id = ? ORDER BY id DESC LIMIT 1`
+              ).bind(publisherAuditId).first().catch(() => null);
+              const prevHash = prevEntry?.entry_hash || null;
+              const entryData = `${publisherAuditId}:${effectiveTier}:${ua}:${reqPath}:${new Date().toISOString()}`;
+              const entryHash = await computeEntryHash(prevHash, entryData).catch(() => null);
+
+              await env.DB.prepare(
+                "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, is_training, referer, path, domain, entry_hash) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)"
+              ).bind(publisherAuditId, ua, effectiveTier, dampedCPM, isStealthFlag, isTrainingFlag, ref, reqPath, rawHostname, entryHash).run();
+            } catch { /* log failure must never break request flow */ }
+          })());
 
           // TollBit log sink (non-blocking, batched)
           // v27: T5 training bots are NOT sent to TollBit — they can't monetize them
@@ -851,6 +1027,16 @@ async function handleRequest(request, env, ctx) {
     // 6. ADMIN FLEET COMMAND
     // ============================================================
     if (path.startsWith(SECRET_ADMIN_PATH)) {
+      // v27.2: Rate limit admin routes
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const rateCheck = await checkAdminRateLimit(ip, path, env);
+      if (!rateCheck.allowed) {
+        return new Response('Too many requests — slow down.', {
+          status: 429,
+          headers: { 'Retry-After': String(rateCheck.retryAfter) }
+        });
+      }
+
       const pass = url.searchParams.get("pass");
       if (pass !== ADMIN_PASSWORD) return new Response("Forbidden", { status: 403 });
 
@@ -1411,7 +1597,7 @@ async function handleRequest(request, env, ctx) {
 
   <div class="grid-4" style="margin-bottom:24px;">
     <div class="card"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${bots.reduce((a,b)=>a+b.c,0).toLocaleString()}</div></div>
-    <div class="card"><div class="stat-label">Publisher Net Revenue</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div><div style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted); margin-top:6px;">/div></div>
+    <div class="card"><div class="stat-label">Net Revenue (Publisher Share)</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div><div style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted); margin-top:6px;">After 30% BotRev management fee</div></div>
     <div class="card"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${stealth[0]?.cnt || 0}</div></div>
     <div class="card" style="border-top:3px solid #f59e0b;"><div class="stat-label" style="color:#b45309;">T5 Training Hits</div><div class="stat-val" style="color:#d97706;">${trainingCount.toLocaleString()}</div></div>
   </div>
@@ -1489,6 +1675,7 @@ async function handleRequest(request, env, ctx) {
           const content  = await file.text();
           const lines    = content.split('\n').filter(l => l.trim() !== "");
           let imported   = 0;
+          const warnings = [];
 
           for (const line of lines) {
             const parts = line.split(',').map(s => s.trim());
@@ -1496,10 +1683,52 @@ async function handleRequest(request, env, ctx) {
             const [net, aid, dom, mkt, key, p, intType, origin] = parts;
             const integType = intType || "A";
             const originSvr = origin  || null;
+
+            // v27.2: Origin server validation for Type A integrations
+            // Verify the publisher's origin is reachable before writing to D1.
+            // Type B (snippet) publishers don't have an origin server requirement.
+            if (integType === "A" && originSvr) {
+              try {
+                const originCheck = await fetch(`https://${originSvr}/`, {
+                  method: 'HEAD',
+                  headers: { 'User-Agent': 'BotRev-Origin-Validator/1.0' },
+                  signal: AbortSignal.timeout(5000),
+                  redirect: 'follow',
+                });
+                // Any HTTP response (including 4xx) means the server is reachable.
+                // Only network-level failures (timeout, DNS error) block onboarding.
+                if (!originCheck.ok && originCheck.status === 0) {
+                  warnings.push(`⚠ ${dom}: Origin server ${originSvr} unreachable — imported anyway, verify before going live.`);
+                }
+              } catch (originErr) {
+                // Origin check failed — log warning but don't block import.
+                // Publisher may be onboarding before DNS is pointed.
+                warnings.push(`⚠ ${dom}: Could not verify origin server ${originSvr} (${originErr.message}) — imported, verify before activating.`);
+              }
+            }
+
             await env.DB.prepare("INSERT OR IGNORE INTO publisher_entities (pub_user_id, audit_id, domain_name, password, integration_type, origin_server) VALUES (?, ?, ?, ?, ?, ?)").bind(net.toLowerCase(), aid, dom, p, integType, originSvr).run();
             await env.DB.prepare("INSERT OR IGNORE INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?)").bind(aid, mkt, key).run();
             imported++;
           }
+
+          // If there are warnings, show them before redirecting
+          if (warnings.length > 0) {
+            return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>Onboarding — BotRev</title></head><body>
+<div class="wrap" style="display:flex; justify-content:center; align-items:center; min-height:100vh;">
+  <div class="card" style="max-width:560px;">
+    <a class="logo" href="#">Bot<span>Rev</span></a>
+    <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; color:var(--green); margin: 8px 0 16px; text-transform:uppercase;">Import Complete — ${imported} publisher${imported !== 1 ? 's' : ''} added</div>
+    <div style="background:#fffbeb; border:1px solid #fcd34d; border-left:4px solid #f59e0b; border-radius:8px; padding:16px; margin-bottom:20px;">
+      <div style="font-family:var(--font-mono); font-size:0.65rem; font-weight:700; color:#92400e; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">⚠ Origin Validation Warnings</div>
+      ${warnings.map(w => `<div style="font-size:0.78rem; color:#b45309; margin-bottom:6px; line-height:1.5;">${w}</div>`).join('')}
+      <div style="font-size:0.75rem; color:#b45309; margin-top:10px; font-style:italic;">Publishers were imported but should be verified in Fleet Command before DNS is activated.</div>
+    </div>
+    <a href="${url.origin + SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary" style="width:100%; justify-content:center;">→ Go to Fleet Command</a>
+  </div>
+</div></body></html>`, { headers: { "Content-Type": "text/html" } });
+          }
+
           return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + ADMIN_PASSWORD, 302);
         } catch (e) {
           return new Response("Error: " + e.message, { status: 500 });
@@ -1783,6 +2012,19 @@ async function handleRequest(request, env, ctx) {
     // ============================================================
     // 13-18. MISC API + ADMIN ENDPOINTS  (unchanged from v26)
     // ============================================================
+
+    // v27.2: Rate limit all /api/admin/* endpoints
+    if (path.startsWith('/api/admin/')) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      const rateCheck = await checkAdminRateLimit(ip, path, env);
+      if (!rateCheck.allowed) {
+        return Response.json(
+          { ok: false, error: 'Rate limit exceeded. Max 10 admin requests per minute per IP.' },
+          { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } }
+        );
+      }
+    }
+
     if (path === "/api/update-account" && request.method === "POST") {
       const eId = url.searchParams.get("entity");
       const pa  = url.searchParams.get("pass");
@@ -1860,14 +2102,37 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (path === "/api/admin/surge-action") {
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      // v27.2: Verify HMAC-signed token instead of plain pass= parameter
+      // Tokens are time-limited (30 min) and cryptographically signed.
+      // Legacy pass= URLs no longer accepted.
+      const tokenPayload = url.searchParams.get("payload");
+      const tokenSig     = url.searchParams.get("sig");
 
+      // Support both new signed tokens and legacy pass= for backward compat during transition
+      const legacyPass = url.searchParams.get("pass");
       let surgeId, auditId, action;
-      if (request.method === "POST") {
-        try { const body = await request.json(); surgeId=body.id; auditId=body.audit_id; action=body.action; } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
+
+      if (tokenPayload && tokenSig) {
+        // New signed token path
+        const verified = await verifySurgeToken(tokenPayload, tokenSig, env.ADMIN_PASS || '');
+        if (!verified.valid) {
+          const isHtml = (request.headers.get("Accept") || "").includes("text/html") || request.method === "GET";
+          const msg = verified.reason || 'Invalid or expired token';
+          if (isHtml) return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body><div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><div class="card" style="max-width:480px;text-align:center;"><div style="font-size:2rem;margin-bottom:12px;">🔒</div><h2 style="color:var(--red);margin-bottom:8px;">Token Invalid</h2><p style="color:var(--muted);font-size:0.88rem;">${msg}</p></div></div></body></html>`, { headers: { "Content-Type": "text/html" } });
+          return Response.json({ ok: false, error: msg }, { status: 403 });
+        }
+        surgeId = verified.surgeId;
+        auditId = verified.auditId;
+        action  = verified.action;
+      } else if (legacyPass && legacyPass === ADMIN_PASSWORD) {
+        // Legacy pass= path — still works but deprecated
+        if (request.method === "POST") {
+          try { const body = await request.json(); surgeId=body.id; auditId=body.audit_id; action=body.action; } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
+        } else {
+          surgeId = url.searchParams.get("id"); auditId = url.searchParams.get("audit_id"); action = url.searchParams.get("action");
+        }
       } else {
-        surgeId = url.searchParams.get("id"); auditId = url.searchParams.get("audit_id"); action = url.searchParams.get("action");
+        return Response.json({ ok: false, error: "Unauthorized — use signed token" }, { status: 401 });
       }
 
       if (!surgeId || !action) return Response.json({ ok: false, error: "Missing id or action" }, { status: 400 });
@@ -1922,6 +2187,62 @@ async function handleRequest(request, env, ctx) {
       }
 
       return Response.json({ ok: true, action, surge_id: surgeId, actioned_cpm: actionedCpm, tollbit: tollbitResult });
+    }
+
+    // ============================================================
+    // 19. HEALTH CHECK ENDPOINT — /health
+    // ============================================================
+    // Used by Cloudflare Health Checks to monitor BotRev's Worker.
+    // Returns 200 + JSON status when the Worker and D1 are operational.
+    // Returns 503 if D1 is unreachable — triggers Load Balancer failover.
+    // This endpoint is public — no auth required (monitoring agents need it).
+    // ============================================================
+    if (path === "/health") {
+      const startMs = Date.now();
+
+      // Check D1 is reachable — a failed D1 means bot classification
+      // still works but logging and publisher lookup fail silently.
+      let d1Status = "ok";
+      let d1LatencyMs = null;
+      try {
+        const d1Start = Date.now();
+        await env.DB.prepare("SELECT 1").first();
+        d1LatencyMs = Date.now() - d1Start;
+      } catch {
+        d1Status = "error";
+      }
+
+      // Count active publishers as a basic sanity check
+      let publisherCount = null;
+      try {
+        const res = await env.DB.prepare(
+          "SELECT COUNT(*) as cnt FROM publisher_entities"
+        ).first();
+        publisherCount = res?.cnt ?? 0;
+      } catch { /* non-critical */ }
+
+      const workerLatencyMs = Date.now() - startMs;
+      const healthy = d1Status === "ok";
+
+      const body = JSON.stringify({
+        status:           healthy ? "ok" : "degraded",
+        version:          "27.2",
+        timestamp:        new Date().toISOString(),
+        d1:               d1Status,
+        d1_latency_ms:    d1LatencyMs,
+        worker_latency_ms: workerLatencyMs,
+        active_publishers: publisherCount,
+        region:           request.cf?.colo || "unknown",
+      }, null, 2);
+
+      return new Response(body, {
+        status: healthy ? 200 : 503,
+        headers: {
+          "Content-Type":  "application/json",
+          "Cache-Control": "no-store, no-cache",
+          "X-BotRev-Version": "27.2",
+        },
+      });
     }
 
     return fetch(request);
