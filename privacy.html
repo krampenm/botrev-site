@@ -29,7 +29,6 @@
     html { scroll-behavior: smooth; }
     body { font-family: var(--font-display); background: var(--bg); color: var(--text); }
 
-    /* NAV */
     nav { background: var(--navy); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 16px rgba(30,58,95,0.2); }
     .nav-inner { max-width: 1100px; margin: auto; padding: 0 32px; height: 60px; display: flex; justify-content: space-between; align-items: center; }
     .logo { font-family: var(--font-display); font-weight: 800; font-size: 1.4rem; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; color: var(--green); }
@@ -37,7 +36,6 @@
     .nav-back { color: var(--light-muted); text-decoration: none; font-size: 0.82rem; font-weight: 600; padding: 6px 14px; border-radius: 6px; transition: all 0.15s; border: 1px solid rgba(168,197,232,0.25); }
     .nav-back:hover { color: #fff; border-color: rgba(168,197,232,0.5); }
 
-    /* HERO BAND */
     .page-hero { background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%); padding: 48px 32px; border-bottom: 3px solid var(--green); }
     .page-hero-inner { max-width: 1100px; margin: auto; }
     .page-eyebrow { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase; color: var(--green); margin-bottom: 10px; }
@@ -46,11 +44,9 @@
     .meta-pills { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
     .meta-pill { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 1px; padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(168,197,232,0.25); color: var(--light-muted); }
 
-    /* LAYOUT */
     .content-wrap { max-width: 1100px; margin: auto; padding: 48px 32px 80px; display: grid; grid-template-columns: 220px 1fr; gap: 48px; align-items: start; }
     @media (max-width: 768px) { .content-wrap { grid-template-columns: 1fr; } .toc { display: none; } }
 
-    /* TOC */
     .toc { position: sticky; top: 80px; }
     .toc-title { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
     .toc-section { margin-bottom: 20px; }
@@ -58,7 +54,6 @@
     .toc a { display: block; font-size: 0.8rem; color: var(--muted); text-decoration: none; padding: 4px 0 4px 10px; border-left: 2px solid transparent; transition: all 0.15s; line-height: 1.4; }
     .toc a:hover { color: var(--navy); border-left-color: var(--green); }
 
-    /* MAIN CONTENT */
     .doc-section { margin-bottom: 56px; }
     .doc-banner { background: var(--navy); border-radius: 10px; padding: 16px 24px; margin-bottom: 36px; display: flex; align-items: center; gap: 14px; }
     .doc-banner-label { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 2px; text-transform: uppercase; color: var(--green); font-weight: 500; }
@@ -66,38 +61,36 @@
 
     h2.section-h { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin: 32px 0 12px; padding-top: 8px; border-top: 1px solid var(--border); }
     h3.sub-h { font-size: 0.95rem; font-weight: 700; color: var(--navy-mid); margin: 20px 0 8px; }
-
     p.body-text { font-size: 0.9rem; color: #334E6B; line-height: 1.8; margin-bottom: 12px; }
 
     ul.doc-list { margin: 8px 0 16px 0; padding: 0; list-style: none; }
     ul.doc-list li { font-size: 0.88rem; color: #334E6B; line-height: 1.7; padding: 5px 0 5px 20px; position: relative; }
     ul.doc-list li::before { content: '◆'; position: absolute; left: 0; color: var(--green); font-size: 0.5rem; top: 9px; }
 
-    ol.doc-list-num { margin: 8px 0 16px 0; padding: 0; list-style: none; counter-reset: doc-counter; }
+    ol.doc-list-num { margin: 8px 0 16px; padding: 0; list-style: none; counter-reset: doc-counter; }
     ol.doc-list-num li { font-size: 0.88rem; color: #334E6B; line-height: 1.7; padding: 6px 0 6px 28px; position: relative; counter-increment: doc-counter; border-bottom: 1px solid var(--border); }
     ol.doc-list-num li:last-child { border-bottom: none; }
     ol.doc-list-num li::before { content: counter(doc-counter); position: absolute; left: 0; top: 6px; background: var(--surface-2); color: var(--navy-mid); font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-lit); }
 
-    /* Compliance note box */
     .compliance-box { background: var(--green-tint); border: 1px solid #6EE7B7; border-left: 4px solid var(--green); border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
     .compliance-box p { font-size: 0.87rem; color: #065F46; line-height: 1.7; margin: 0; }
     .compliance-box strong { color: #047857; }
 
-    /* Sub-processor table */
+    .warning-box { background: #FFFBEB; border: 1px solid #FCD34D; border-left: 4px solid #F59E0B; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+    .warning-box p { font-size: 0.87rem; color: #92400E; line-height: 1.7; margin: 0; }
+
     .sp-table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
     .sp-table th { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); padding: 12px 16px; text-align: left; background: var(--surface-2); border-bottom: 2px solid var(--border); }
     .sp-table td { padding: 12px 16px; font-size: 0.87rem; color: #334E6B; border-bottom: 1px solid var(--border); }
     .sp-table tr:last-child td { border-bottom: none; }
     .sp-table tr:hover td { background: var(--surface-2); }
 
-    /* Definition list */
     .def-list { margin: 8px 0 16px; }
     .def-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
     .def-item:last-child { border-bottom: none; }
     .def-term { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; color: var(--navy); margin-bottom: 4px; }
     .def-desc { font-size: 0.87rem; color: #334E6B; line-height: 1.7; }
 
-    /* Signature block */
     .sig-block { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 32px; }
     @media (max-width: 600px) { .sig-block { grid-template-columns: 1fr; } }
     .sig-party { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; }
@@ -105,12 +98,6 @@
     .sig-line { border-bottom: 1px solid var(--border-lit); height: 44px; margin-bottom: 8px; }
     .sig-detail { font-size: 0.82rem; color: var(--muted); line-height: 1.8; }
 
-    /* Instructions box */
-    .instructions-box { background: var(--surface-2); border: 1px solid var(--border-lit); border-radius: 8px; padding: 16px 20px; margin-top: 32px; }
-    .instructions-box p { font-size: 0.85rem; color: var(--muted); line-height: 1.7; margin: 0; }
-    .instructions-box strong { color: var(--navy); }
-
-    /* Footer */
     footer { background: #0F2137; padding: 28px 32px; border-top: 1px solid rgba(168,197,232,0.1); }
     .footer-inner { max-width: 1100px; margin: auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .footer-logo { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--green); text-decoration: none; }
@@ -120,7 +107,6 @@
 </head>
 <body>
 
-  <!-- NAV -->
   <nav>
     <div class="nav-inner">
       <a class="logo" href="/">Bot<span>Rev</span></a>
@@ -128,7 +114,6 @@
     </div>
   </nav>
 
-  <!-- PAGE HERO -->
   <div class="page-hero">
     <div class="page-hero-inner">
       <div class="page-eyebrow">Legal & Compliance</div>
@@ -136,16 +121,14 @@
       <p>How BotRev collects, uses, and protects data in connection with our bot traffic monitoring and AI data monetization services.</p>
       <div class="meta-pills">
         <span class="meta-pill">Effective: March 1, 2026</span>
-        <span class="meta-pill">Last Updated: March 2026</span>
-        <span class="meta-pill">Contact: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="c3aea2b7b783a1acb7b1a6b5eda0acae">[email&#160;protected]</a></span>
+        <span class="meta-pill">Last Updated: March 17, 2026</span>
+        <span class="meta-pill">Contact: matt@botrev.com</span>
       </div>
     </div>
   </div>
 
-  <!-- CONTENT -->
   <div class="content-wrap">
 
-    <!-- TABLE OF CONTENTS -->
     <aside class="toc">
       <div class="toc-title">Contents</div>
       <div class="toc-section">
@@ -178,12 +161,9 @@
       </div>
     </aside>
 
-    <!-- MAIN -->
     <main>
 
-      <!-- ═══════════════════════════════════════ -->
-      <!-- PRIVACY POLICY                          -->
-      <!-- ═══════════════════════════════════════ -->
+      <!-- PRIVACY POLICY -->
       <div class="doc-banner">
         <div>
           <div class="doc-banner-label">Document 1</div>
@@ -195,42 +175,62 @@
 
       <h2 class="section-h" id="pp-who">1. Who We Are</h2>
       <p class="body-text">BotRev is the AI Monetization Layer for Publishers, headquartered in Chicago, Illinois, USA. We provide publishers with technical infrastructure to identify, log, and monetize automated bot traffic on their websites.</p>
-      <p class="body-text">For questions about this policy, contact: <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="c8a5a9bcbc88aaa7bcbaadbee6aba7a5">[email&#160;protected]</a></strong></p>
+      <p class="body-text">For questions about this policy, contact: <strong>matt@botrev.com</strong></p>
 
       <h2 class="section-h" id="pp-collect">2. What Data We Collect</h2>
 
       <h3 class="sub-h">2.1 Bot Traffic Data (Non-Personal)</h3>
-      <p class="body-text">Through the BotRev Sniffer Script installed on publisher websites, we collect the following data exclusively from automated bot agents:</p>
+      <p class="body-text">Through BotRev's edge infrastructure installed on publisher domains, we collect the following data exclusively from automated bot agents:</p>
       <ul class="doc-list">
         <li>User-Agent string of the requesting bot</li>
-        <li>Bot tier classification (Tier 1–4) based on agent identification</li>
+        <li>Bot tier classification (Tier 1–5) based on agent identification</li>
+        <li>Training flag — whether the bot is classified as a T5 AI training crawler (1) or not (0)</li>
         <li>CPM value assigned to the hit</li>
         <li>HTTP Referer header (if present)</li>
         <li>Timestamp of the request</li>
+        <li>URL path requested</li>
+        <li>Domain name of the publisher property</li>
         <li>Publisher audit ID associated with the domain</li>
+        <li>Entry hash — a cryptographic hash linking each log entry to the previous entry in the tamper-evident audit chain</li>
       </ul>
 
       <div class="compliance-box">
-        <p><strong>Critical compliance note:</strong> BotRev does NOT collect, store, or process IP addresses, cookies, device fingerprints, or any other information that could identify a natural person. Our Sniffer Script includes a human detection filter that prevents logging of requests from standard human browsers (Chrome, Safari, Firefox, Mozilla) that do not exhibit bot behavioral patterns.</p>
+        <p><strong>Bot traffic data and personal data:</strong> BotRev does NOT collect, store, or process IP addresses, cookies, device fingerprints, or any other information that could identify a natural person from bot traffic. Our edge classification engine includes a human detection filter that prevents logging of requests from standard human browsers (Chrome, Safari, Firefox) that do not exhibit bot behavioral patterns. Human visitor traffic is passed transparently to the publisher's origin server without logging.</p>
       </div>
 
-      <h3 class="sub-h">2.2 Publisher Account Data</h3>
+      <h3 class="sub-h">2.2 Admin Security Logs (Limited IP Address Collection)</h3>
+      <p class="body-text">BotRev collects IP addresses exclusively in one narrow context: requests to BotRev's internal admin endpoints (<code>/api/admin/*</code> and <code>/admin-portal-access</code>). This data is collected solely for rate limiting and security purposes — specifically to prevent brute-force credential attacks on BotRev's administrative infrastructure.</p>
+      <ul class="doc-list">
+        <li>IP address of the requesting client</li>
+        <li>Admin endpoint path accessed</li>
+        <li>Timestamp of the request</li>
+      </ul>
+      <p class="body-text">This data is stored in a dedicated <code>admin_requests</code> table, is automatically purged on a rolling basis (entries older than 10 minutes are deleted during routine cleanup), and is never shared with any third party. Publisher website visitors and bot agents are never subject to this IP collection — it applies exclusively to requests to BotRev's own administrative portal.</p>
+
+      <div class="warning-box">
+        <p><strong>Scope clarification:</strong> Admin IP logging applies only to BotRev's own administrative users (i.e., Matt Krampen and any authorized BotRev staff accessing the admin portal). It does not apply to publisher accounts, publisher website visitors, or any bot traffic.</p>
+      </div>
+
+      <h3 class="sub-h">2.3 Publisher Account Data</h3>
       <p class="body-text">When publishers create accounts on dash.botrev.com, we collect:</p>
       <ul class="doc-list">
         <li>Network ID (username) and hashed access key</li>
         <li>Domain name(s) associated with the account</li>
         <li>Marketplace API keys (encrypted at rest in Cloudflare D1)</li>
         <li>Contact email address</li>
+        <li>Integration type (Standard CNAME or Snippet)</li>
+        <li>Origin server address (for Standard CNAME integrations)</li>
       </ul>
 
-      <h3 class="sub-h">2.3 Data We Do Not Collect</h3>
+      <h3 class="sub-h">2.4 Data We Do Not Collect</h3>
       <p class="body-text">BotRev explicitly does not collect:</p>
       <ul class="doc-list">
-        <li>IP addresses of any visitor (human or bot)</li>
+        <li>IP addresses of website visitors (human or bot) — see Section 2.2 for the narrow admin-only exception</li>
         <li>Cookies or browser storage data</li>
         <li>Personal information of end-users visiting publisher websites</li>
         <li>Behavioral data, browsing history, or session data of human visitors</li>
         <li>Payment card information (handled by third-party processors)</li>
+        <li>Content of publisher web pages (BotRev routes requests, it does not read or store page content)</li>
       </ul>
 
       <h2 class="section-h" id="pp-legal">3. Legal Basis for Processing</h2>
@@ -240,12 +240,12 @@
       <p class="body-text">For publisher account data (which may include personal contact information), our legal basis is:</p>
       <ul class="doc-list">
         <li><strong>Contractual necessity (Article 6(1)(b))</strong> — processing required to provide the BotRev service</li>
-        <li><strong>Legitimate interests (Article 6(1)(f))</strong> — maintaining secure publisher accounts</li>
+        <li><strong>Legitimate interests (Article 6(1)(f))</strong> — maintaining secure publisher accounts and admin security logging</li>
       </ul>
 
       <h3 class="sub-h">3.2 CCPA (California)</h3>
       <p class="body-text">Bot traffic data does not constitute 'personal information' under the California Consumer Privacy Act as defined in Civil Code Section 1798.140(o), as it is not information that identifies, relates to, or could reasonably be linked to a natural person.</p>
-      <p class="body-text">California residents who are BotRev publisher clients have the right to: know what personal data we hold, request deletion, and opt out of sale. BotRev does not sell personal data.</p>
+      <p class="body-text">Admin security logs (IP addresses of admin portal access) are collected under the legitimate security interest exemption and are not sold or shared. California residents who are BotRev publisher clients have the right to: know what personal data we hold, request deletion, and opt out of sale. BotRev does not sell personal data.</p>
 
       <h3 class="sub-h">3.3 Other Applicable Regulations</h3>
       <ul class="doc-list">
@@ -258,58 +258,69 @@
       <h2 class="section-h" id="pp-use">4. How We Use Data</h2>
       <p class="body-text">Bot traffic data is used exclusively for:</p>
       <ul class="doc-list">
-        <li>Generating publisher audit reports showing bot traffic volume and estimated recovery value</li>
-        <li>Routing traffic to content marketplaces (TollBit, Dappier, ProRata) for monetization</li>
-        <li>Operating the BotRev dashboard and Fleet Command admin portal</li>
+        <li>Generating publisher audit reports showing bot traffic volume, tier breakdown, and estimated revenue value</li>
+        <li>Routing monetizable bot traffic (T1, T2, T4) to content marketplaces (TollBit) for licensing transactions</li>
+        <li>Logging T5 AI training crawler activity for potential Training Deals program outreach</li>
+        <li>Operating the BotRev publisher dashboard and Fleet Command admin portal</li>
+        <li>Detecting demand spikes via Surge Intelligence and sending rate optimization alerts</li>
         <li>Improving bot detection accuracy and tier classification</li>
         <li>Providing monthly reconciliation reports to publishers</li>
+        <li>Maintaining a tamper-evident audit chain to verify log integrity on behalf of publishers</li>
       </ul>
       <p class="body-text">BotRev does not use bot traffic data for advertising targeting, behavioral profiling, or any purpose beyond the bot monetization services described herein.</p>
 
       <h2 class="section-h" id="pp-sharing">5. Data Sharing & Third Parties</h2>
       <p class="body-text">BotRev shares bot traffic data with the following categories of third parties:</p>
       <ul class="doc-list">
-        <li><strong>Content Marketplaces (TollBit, Dappier, ProRata):</strong> Bot agent and hit data is transmitted to verify licensing transactions. Each marketplace operates under their own privacy and data use policies.</li>
-        <li><strong>Cloudflare:</strong> All data is stored on Cloudflare infrastructure (D1 database, R2 object storage, Workers). Cloudflare's Data Processing Addendum governs this relationship.</li>
-        <li><strong>Publisher Clients:</strong> Publishers receive full access to bot log data associated with their own audit IDs.</li>
+        <li><strong>TollBit:</strong> Bot agent and hit data is transmitted to TollBit's log sink endpoint to verify and record licensing transactions. TollBit operates under their own privacy and data use policies.</li>
+        <li><strong>Resend:</strong> Publisher domain names, bot hit counts, and surge pricing data are included in transactional surge alert emails sent via Resend's email delivery platform. Resend does not receive personal data of website visitors.</li>
+        <li><strong>Cloudflare:</strong> All data is stored and processed on Cloudflare infrastructure (D1 database, Workers compute, Load Balancer). Cloudflare's Data Processing Addendum governs this relationship.</li>
+        <li><strong>Publisher Clients:</strong> Publishers receive full access to bot log data associated with their own audit IDs via the publisher dashboard.</li>
       </ul>
       <p class="body-text">BotRev does not sell, rent, or share data with data brokers, advertisers, or any third parties beyond those listed above.</p>
 
       <h2 class="section-h" id="pp-retention">6. Data Retention</h2>
-      <p class="body-text">Bot traffic logs are retained for 24 months from the date of collection, after which they are permanently deleted from the D1 database. Publisher account data is retained for the duration of the publisher relationship plus 12 months.</p>
-      <p class="body-text">Publishers may request deletion of their bot log data at any time by contacting <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="84e9e5f0f0c4e6ebf0f6e1f2aae7ebe9">[email&#160;protected]</a>.</p>
+      <ul class="doc-list">
+        <li><strong>Bot traffic logs:</strong> Retained for 24 months from the date of collection, then permanently deleted from the D1 database. This matches the contractual commitment in BotRev's Authorization of Representation Agreement.</li>
+        <li><strong>Admin security logs:</strong> Automatically purged on a rolling basis — entries older than 10 minutes are deleted during routine cleanup operations. No long-term admin IP data is retained.</li>
+        <li><strong>Publisher account data:</strong> Retained for the duration of the publisher relationship plus 12 months following termination.</li>
+        <li><strong>Surge event logs:</strong> Retained for the duration of the publisher relationship and deleted upon account termination.</li>
+      </ul>
+      <p class="body-text">Publishers may request deletion of their bot log data at any time by contacting matt@botrev.com. BotRev will process deletion requests within 30 days.</p>
 
       <h2 class="section-h" id="pp-security">7. Security</h2>
-      <p class="body-text">BotRev implements the following security measures:</p>
+      <p class="body-text">BotRev implements the following technical and organizational security measures:</p>
       <ul class="doc-list">
-        <li>All data stored in Cloudflare D1 (encrypted at rest, SOC 2 Type II certified infrastructure)</li>
-        <li>Vault content stored in Cloudflare R2 (encrypted at rest)</li>
-        <li>Publisher access keys stored as hashed values</li>
-        <li>HTTPS enforced on all BotRev endpoints via Cloudflare SSL</li>
-        <li>No IP address logging eliminates the primary vector for personal data exposure</li>
-        <li>Admin portal access restricted by password and secret path</li>
+        <li><strong>Encryption at rest:</strong> All data stored in Cloudflare D1 and R2 is encrypted at rest on SOC 2 Type II certified infrastructure</li>
+        <li><strong>Encryption in transit:</strong> HTTPS enforced on all BotRev endpoints via Cloudflare SSL/TLS</li>
+        <li><strong>Tamper-evident audit log:</strong> Each bot_logs entry stores a cryptographic SHA-256 hash chained to the previous entry. Any modification to historical log records breaks the hash chain and is detectable by the publisher</li>
+        <li><strong>HMAC-signed authorization tokens:</strong> Surge Intelligence action links (approve/reject rate changes) are cryptographically signed with HMAC-SHA256 and expire after 30 minutes, preventing replay attacks</li>
+        <li><strong>Admin rate limiting:</strong> All admin portal endpoints are rate-limited to 10 requests per minute per IP address to prevent brute-force attacks</li>
+        <li><strong>No default credentials:</strong> Admin access requires a securely stored environment variable (env.ADMIN_PASS) — no hardcoded fallback passwords exist in production</li>
+        <li><strong>Publisher access keys:</strong> Stored as hashed values in D1 — BotRev cannot recover plaintext access keys</li>
+        <li><strong>DNS-level failover:</strong> BotRev operates a Cloudflare Load Balancer on proxy infrastructure with automated health monitoring every 60 seconds. If BotRev's infrastructure becomes unreachable, publisher traffic automatically reroutes to their origin server — publisher site availability is not dependent on BotRev's operational status</li>
+        <li><strong>No visitor IP logging:</strong> Human visitor and bot IP addresses are not logged from publisher traffic, eliminating the primary vector for personal data exposure at scale</li>
       </ul>
 
       <h2 class="section-h" id="pp-rights">8. Your Rights</h2>
-      <p class="body-text">Publisher clients may exercise the following rights by contacting <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="90fdf1e4e4d0f2ffe4e2f5e6bef3fffd">[email&#160;protected]</a>:</p>
+      <p class="body-text">Publisher clients may exercise the following rights by contacting matt@botrev.com:</p>
       <ul class="doc-list">
         <li><strong>Access:</strong> Request a copy of all data BotRev holds associated with your account</li>
         <li><strong>Correction:</strong> Request correction of inaccurate account information</li>
         <li><strong>Deletion:</strong> Request deletion of your account and associated bot logs</li>
         <li><strong>Portability:</strong> Request your bot log data in CSV format</li>
+        <li><strong>Audit log verification:</strong> Request a hash chain verification report to confirm your audit log has not been tampered with</li>
         <li><strong>Objection:</strong> Object to processing of your account data</li>
       </ul>
 
       <h2 class="section-h" id="pp-changes">9. Changes to This Policy</h2>
-      <p class="body-text">BotRev will notify publisher clients of material changes to this Privacy Policy via email at least 30 days before the changes take effect. Continued use of BotRev services after that date constitutes acceptance of the updated policy.</p>
+      <p class="body-text">BotRev will notify publisher clients of material changes to this Privacy Policy via email at least 30 days before the changes take effect. The "Last Updated" date at the top of this page reflects the most recent revision. Continued use of BotRev services after the effective date of changes constitutes acceptance of the updated policy.</p>
 
       <h2 class="section-h" id="pp-contact">10. Contact</h2>
       <p class="body-text">For privacy inquiries, data subject requests, or compliance questions:</p>
-      <p class="body-text"><strong>Matt Krampen, CEO — <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="660b071212260409121403104805090b">[email&#160;protected]</a> — botrev.com</strong></p>
+      <p class="body-text"><strong>Matt Krampen, Founder & CEO — matt@botrev.com — botrev.com — Chicago, IL</strong></p>
 
-      <!-- ═══════════════════════════════════════ -->
-      <!-- DPA                                     -->
-      <!-- ═══════════════════════════════════════ -->
+      <!-- DPA -->
       <div class="doc-banner" style="margin-top: 64px;">
         <div>
           <div class="doc-banner-label">Document 2</div>
@@ -335,19 +346,23 @@
         </div>
         <div class="def-item">
           <div class="def-term">"Processing"</div>
-          <div class="def-desc">Any operation performed on bot traffic data, including collection, storage, analysis, and transmission to content marketplaces.</div>
+          <div class="def-desc">Any operation performed on bot traffic data, including collection, classification, storage, analysis, transmission to content marketplaces, and surge pricing evaluation.</div>
         </div>
         <div class="def-item">
           <div class="def-term">"Bot Traffic Data"</div>
-          <div class="def-desc">User-Agent strings, tier classifications, CPM values, timestamps, and referer headers collected from automated agents visiting Controller's website(s).</div>
+          <div class="def-desc">User-Agent strings, tier classifications (T1–T5), training flags, CPM values, timestamps, page paths, domain names, referer headers, and entry hashes collected from automated agents visiting Controller's website(s).</div>
         </div>
         <div class="def-item">
           <div class="def-term">"Personal Data"</div>
-          <div class="def-desc">Has the meaning given in GDPR Article 4(1). The parties acknowledge that Bot Traffic Data does not constitute Personal Data as it originates from automated agents rather than natural persons.</div>
+          <div class="def-desc">Has the meaning given in GDPR Article 4(1). The parties acknowledge that Bot Traffic Data does not constitute Personal Data as it originates from automated agents rather than natural persons. Publisher account contact data (email address) may constitute Personal Data and is treated accordingly.</div>
         </div>
         <div class="def-item">
           <div class="def-term">"Sub-Processor"</div>
           <div class="def-desc">Any third party engaged by BotRev to process data on behalf of the Controller.</div>
+        </div>
+        <div class="def-item">
+          <div class="def-term">"Tamper-Evident Audit Log"</div>
+          <div class="def-desc">BotRev's cryptographically chained bot_logs table in which each entry stores a SHA-256 hash of the prior entry's hash concatenated with current entry data, enabling detection of any retroactive modification.</div>
         </div>
       </div>
 
@@ -355,11 +370,12 @@
       <h3 class="sub-h">2.1 Nature of Processing</h3>
       <p class="body-text">BotRev processes Bot Traffic Data on behalf of the Publisher for the following purposes:</p>
       <ol class="doc-list-num">
-        <li>Detection and classification of automated bot agents visiting Publisher's website(s)</li>
-        <li>Storage of bot traffic logs in Cloudflare D1 database associated with Publisher's audit ID</li>
-        <li>Transmission of bot hit data to content marketplaces (TollBit, Dappier, ProRata) for licensing transactions</li>
-        <li>Generation of audit reports and revenue reconciliation statements for Publisher</li>
-        <li>Storage of Publisher's content as machine-readable Markdown in the BotRev Vault (R2 object storage)</li>
+        <li>Detection and classification of automated bot agents (T1–T5) visiting Publisher's website(s)</li>
+        <li>Storage of bot traffic logs in Cloudflare D1 database associated with Publisher's audit ID, including a tamper-evident hash chain</li>
+        <li>Transmission of bot hit data to content marketplaces (TollBit) for licensing transactions</li>
+        <li>Real-time surge detection and demand-based pricing optimization via BotRev's Surge Intelligence algorithm</li>
+        <li>Generation of audit reports, tier breakdowns, and revenue reconciliation statements for Publisher</li>
+        <li>Logging T5 AI training crawler activity for potential Training Deals program outreach</li>
       </ol>
 
       <h3 class="sub-h">2.2 Duration</h3>
@@ -370,12 +386,13 @@
       <ol class="doc-list-num">
         <li>Process Bot Traffic Data only on documented instructions from the Controller (Publisher), including the instructions set out in this DPA and the Publisher Services Agreement.</li>
         <li>Ensure that persons authorized to process Bot Traffic Data have committed to confidentiality or are under appropriate statutory obligations of confidentiality.</li>
-        <li>Implement appropriate technical and organizational security measures including: encryption at rest, HTTPS enforcement, access controls, and no IP address logging.</li>
-        <li>Not engage Sub-Processors without prior written or general authorization from the Controller, and notify the Controller of any intended changes to Sub-Processors.</li>
+        <li>Implement appropriate technical and organizational security measures including: encryption at rest, HTTPS enforcement, tamper-evident audit logging, HMAC-signed authorization tokens, admin rate limiting, and DNS-level failover infrastructure.</li>
+        <li>Not engage Sub-Processors without prior written or general authorization from the Controller, and notify the Controller of any intended changes to Sub-Processors with at least 30 days' notice.</li>
         <li>Assist the Controller in responding to data subject rights requests, to the extent applicable, within 30 days of receipt.</li>
         <li>Delete or return all Bot Traffic Data upon termination of services, at the Controller's choice, within 30 days of written request.</li>
         <li>Make available all information necessary to demonstrate compliance with this DPA and allow for audits conducted by the Controller or a mandated auditor, with reasonable notice.</li>
         <li>Notify the Controller without undue delay (and within 72 hours where feasible) upon becoming aware of a personal data breach affecting Controller data.</li>
+        <li>Maintain DNS-level failover infrastructure such that Publisher's human visitor traffic is automatically rerouted to Publisher's origin server if BotRev's infrastructure becomes unreachable. Publisher site availability shall not be dependent on BotRev's operational status.</li>
       </ol>
 
       <h2 class="section-h" id="dpa-publisher">4. Publisher's Obligations as Controller</h2>
@@ -386,6 +403,7 @@
         <li>Not instruct BotRev to process data in a manner that would violate applicable law.</li>
         <li>Maintain a publicly accessible privacy policy on its website(s) that discloses the use of third-party analytics and bot monitoring services.</li>
         <li>Promptly notify BotRev of any data subject requests or regulatory inquiries related to BotRev's processing activities.</li>
+        <li>Connect Publisher's domain to Bing Webmaster Tools and provide BotRev read access to AI Performance data to facilitate GEO citation analysis as part of the audit service.</li>
       </ol>
 
       <h2 class="section-h" id="dpa-sub">5. Sub-Processors</h2>
@@ -401,26 +419,26 @@
         <tbody>
           <tr>
             <td><strong>Cloudflare, Inc.</strong></td>
-            <td>D1 database, R2 storage, Workers compute</td>
+            <td>D1 database, Workers compute, Load Balancer, DNS failover infrastructure</td>
             <td>USA (global edge network)</td>
           </tr>
           <tr>
-            <td><strong>TollBit</strong></td>
-            <td>Bot traffic licensing marketplace</td>
+            <td><strong>TollBit (Novoscribe, Inc.)</strong></td>
+            <td>Bot traffic licensing marketplace — receives bot hit logs for transaction verification</td>
             <td>USA</td>
           </tr>
           <tr>
-            <td><strong>Dappier</strong></td>
-            <td>Bot traffic licensing marketplace</td>
-            <td>USA</td>
-          </tr>
-          <tr>
-            <td><strong>ProRata</strong></td>
-            <td>Bot traffic licensing marketplace</td>
+            <td><strong>Resend</strong></td>
+            <td>Transactional email delivery — surge alert notifications containing domain name and traffic data</td>
             <td>USA</td>
           </tr>
         </tbody>
       </table>
+
+      <div class="warning-box">
+        <p><strong>Note on Dappier and ProRata:</strong> These marketplaces are listed in BotRev's platform architecture as future sub-processors. They are not currently active in BotRev's production routing and are not receiving publisher data. This table will be updated with 30 days' notice before either is activated.</p>
+      </div>
+
       <p class="body-text">BotRev will notify the Controller at least 30 days in advance of adding or replacing Sub-Processors and provide the Controller with the opportunity to object.</p>
 
       <h2 class="section-h" id="dpa-transfers">6. International Data Transfers</h2>
@@ -428,19 +446,19 @@
       <p class="body-text">To the extent any Publisher account data (contact information) is transferred outside the EEA, BotRev relies on Cloudflare's Standard Contractual Clauses (SCCs) as the transfer mechanism.</p>
 
       <h2 class="section-h" id="dpa-confidentiality">7. Confidentiality</h2>
-      <p class="body-text">Both parties agree to keep confidential all non-public information disclosed in connection with this DPA, including bot traffic data, revenue figures, API keys, and audit results. This obligation survives termination of the DPA for a period of three (3) years.</p>
+      <p class="body-text">Both parties agree to keep confidential all non-public information disclosed in connection with this DPA, including bot traffic data, revenue figures, API keys, audit results, and BotRev's proprietary Surge Intelligence pricing formula. This obligation survives termination of the DPA for a period of three (3) years.</p>
 
       <h2 class="section-h" id="dpa-liability">8. Liability and Indemnification</h2>
       <p class="body-text">Each party is liable for damages caused by processing that infringes applicable data protection law to the extent it is responsible for such infringement. BotRev's total aggregate liability under this DPA shall not exceed the total fees paid by the Publisher in the twelve (12) months preceding the claim.</p>
 
       <h2 class="section-h" id="dpa-term">9. Term and Termination</h2>
-      <p class="body-text">This DPA takes effect on the date the Publisher activates their BotRev account and remains in force until the Publisher Services Agreement is terminated. Termination of the Publisher Services Agreement automatically terminates this DPA.</p>
+      <p class="body-text">This DPA takes effect on the date the Publisher activates their BotRev account and remains in force until the Publisher Services Agreement is terminated. Termination of the Publisher Services Agreement automatically terminates this DPA. Upon termination, BotRev shall provide Publisher with a full export of their bot log data in CSV format within 30 days of written request.</p>
 
       <h2 class="section-h" id="dpa-law">10. Governing Law</h2>
       <p class="body-text">This DPA is governed by the laws of the State of Illinois, USA, without regard to conflict of law principles. For Publishers subject to GDPR, this DPA shall also be interpreted in accordance with applicable EU data protection law to the extent required.</p>
 
       <h2 class="section-h" id="dpa-entire">11. Entire Agreement</h2>
-      <p class="body-text">This DPA, together with the Publisher Services Agreement, constitutes the entire agreement between the parties with respect to data processing and supersedes all prior agreements on the same subject matter.</p>
+      <p class="body-text">This DPA, together with the Publisher Services Agreement (Authorization of Representation Agreement), constitutes the entire agreement between the parties with respect to data processing and supersedes all prior agreements on the same subject matter.</p>
 
       <h2 class="section-h" id="dpa-signatures">Signatures</h2>
       <div class="sig-block">
@@ -449,7 +467,8 @@
           <div class="sig-line"></div>
           <div class="sig-detail">
             <strong>Matt Krampen</strong><br>
-            CEO, BotRev<br>
+            Founder & CEO, BotRev LLC<br>
+            Chicago, Illinois<br>
             Date: March 2026
           </div>
         </div>
@@ -459,6 +478,21 @@
           <div class="sig-detail" style="color:var(--muted);">
             [Publisher Authorized Signatory]<br>
             [Title]<br>
+            [Company]<br>
             Date: _______________
           </div>
-        </
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <footer>
+    <div class="footer-inner">
+      <a class="footer-logo" href="/">Bot<span>Rev</span></a>
+      <div class="footer-copy">© 2026 BotRev LLC. Chicago, IL. Privacy questions: matt@botrev.com</div>
+    </div>
+  </footer>
+
+</body>
+</html>
