@@ -580,6 +580,11 @@ export default {
 // ══════════════════════════════════════════════════════════════════
 // MAIN REQUEST HANDLER — extracted for clean try/catch wrapping
 // ══════════════════════════════════════════════════════════════════
+// ── TEMPLATE LITERAL ESCAPE HELPER ──────────────────────────────────────────
+// Escapes backticks and ${ sequences in DB values before injecting into
+// template literals. Prevents SyntaxErrors when DB data contains special chars.
+const esc = s => String(s || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+
 async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     let path = url.pathname.toLowerCase();
@@ -1139,10 +1144,10 @@ async function handleRequest(request, env, ctx) {
         const trainingHits = r.training_hits || 0;
         return `
         <tr class="net-row">
-          <td><input type="checkbox" class="row-cb" data-aid="${r.audit_id}" style="accent-color:var(--green);"></td>
+          <td><input type="checkbox" class="row-cb" data-aid="${esc(r.audit_id)}" style="accent-color:var(--green);"></td>
           <td>
-            <div style="font-weight:700;">${r.domain_name}</div>
-            <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${r.pub_user_id}</div>
+            <div style="font-weight:700;">${esc(r.domain_name)}</div>
+            <div style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${esc(r.pub_user_id)}</div>
             <div style="font-family:var(--font-mono); font-size:0.55rem; margin-top:4px; display:inline-block; padding:1px 7px; border-radius:8px; background:${r.integration_type==='B'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${r.integration_type==='B'?'#f59e0b':'var(--green)'};">${r.integration_type==='B'?'Snippet':'Standard'}</div>
           </td>
           <td>
@@ -1160,14 +1165,14 @@ async function handleRequest(request, env, ctx) {
           <td><span style="font-family:var(--font-mono); font-weight:500; color:var(--green);">$${r.total_mkt_gross.toFixed(2)}</span></td>
           <td>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button onclick="window.location.href='/dashboard?entity=${r.pub_user_id}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
-              <button onclick="openEditModal('${r.audit_id}')" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green);">Edit</button>
-              <button onclick="var p=document.getElementById('snip-panel-${r.audit_id}');p.style.display=p.style.display==='none'?'block':'none'" class="btn btn-ghost btn-sm" style="font-size:0.65rem;">&lt;/&gt;</button>
-              <button onclick="deletePublisher('${r.audit_id}','${r.domain_name}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
+              <button onclick="window.location.href='/dashboard?entity=${esc(r.pub_user_id)}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
+              <button onclick="openEditModal('${esc(r.audit_id)}')" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green);">Edit</button>
+              <button onclick="var p=document.getElementById('snip-panel-${esc(r.audit_id)}');p.style.display=p.style.display==='none'?'block':'none'" class="btn btn-ghost btn-sm" style="font-size:0.65rem;">&lt;/&gt;</button>
+              <button onclick="deletePublisher('${esc(r.audit_id)}','${esc(r.domain_name)}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
             </div>
-            <div id="snip-panel-${r.audit_id}" style="display:none; margin-top:8px; position:relative; min-width:320px;">
-              <pre id="snip-code-${r.audit_id}" style="font-family:var(--font-mono); font-size:0.6rem; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:6px; padding:10px 50px 10px 12px; color:#a8c5e8; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin:0;">&lt;script&gt;(function(){var u="https://dash.botrev.com/api/sniff?audit_id=${encodeURIComponent(r.audit_id)}";if(navigator.sendBeacon){navigator.sendBeacon(u)}else{fetch(u,{mode:"no-cors",keepalive:true})}})();&lt;/script&gt;</pre>
-              <button onclick="navigator.clipboard.writeText(document.getElementById('snip-code-${r.audit_id}').innerText).then(function(){var b=document.getElementById('snip-copy-${r.audit_id}');b.textContent='✓';b.style.color='var(--green)';setTimeout(function(){b.textContent='Copy';b.style.color='';},2000)})" id="snip-copy-${r.audit_id}" style="position:absolute; top:6px; right:6px; font-family:var(--font-mono); font-size:0.58rem; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--light-muted); cursor:pointer;">Copy</button>
+            <div id="snip-panel-${esc(r.audit_id)}" style="display:none; margin-top:8px; position:relative; min-width:320px;">
+              <pre id="snip-code-${esc(r.audit_id)}" style="font-family:var(--font-mono); font-size:0.6rem; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:6px; padding:10px 50px 10px 12px; color:#a8c5e8; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin:0;">&lt;script&gt;(function(){var u="https://dash.botrev.com/api/sniff?audit_id=${encodeURIComponent(esc(r.audit_id))}";if(navigator.sendBeacon){navigator.sendBeacon(u)}else{fetch(u,{mode:"no-cors",keepalive:true})}})();&lt;/script&gt;</pre>
+              <button onclick="navigator.clipboard.writeText(document.getElementById('snip-code-${esc(r.audit_id)}').innerText).then(function(){var b=document.getElementById('snip-copy-${esc(r.audit_id)}');b.textContent='✓';b.style.color='var(--green)';setTimeout(function(){b.textContent='Copy';b.style.color='';},2000)})" id="snip-copy-${esc(r.audit_id)}" style="position:absolute; top:6px; right:6px; font-family:var(--font-mono); font-size:0.58rem; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--light-muted); cursor:pointer;">Copy</button>
             </div>
           </td>
         </tr>`;
@@ -1178,7 +1183,7 @@ async function handleRequest(request, env, ctx) {
 </div>
 
 <script>
-  const fullData = ${JSON.stringify(fullList)};
+  const fullData = ${JSON.stringify(fullList).replace(/<\/script>/gi, '<\\/script>')};
   function toggleAll(m){ document.querySelectorAll('.row-cb').forEach(c => { if(c.closest('tr').style.display !== 'none') c.checked = m.checked; }); }
   function filterTable(){ var v = document.getElementById("netSearch").value.toUpperCase(); document.querySelectorAll(".net-row").forEach(r => { r.style.display = r.innerText.toUpperCase().includes(v) ? "" : "none"; }); }
 
@@ -1251,12 +1256,12 @@ async function handleRequest(request, env, ctx) {
     const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb=>cb.getAttribute('data-aid'));
     if(!ids.length) return alert("Select at least one property.");
     const data = fullData.filter(r => ids.includes(r.audit_id));
-    let csv = "NetworkID,Domain,Sniffer,TrainingHits,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\n";
+    let csv = "NetworkID,Domain,Sniffer,TrainingHits,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\\n";
     data.forEach(r => {
       const fee = r.total_mkt_gross * 0.30;
       csv += [r.pub_user_id, r.domain_name, r.total_bot_hits > 0 ? 'ACTIVE' : 'OFFLINE',
               r.training_hits||0, ...r.mktStats.map(m=>m.status),
-              r.total_mkt_gross.toFixed(2), fee.toFixed(2), (r.total_mkt_gross-fee).toFixed(2)].join(',') + "\n";
+              r.total_mkt_gross.toFixed(2), fee.toFixed(2), (r.total_mkt_gross-fee).toFixed(2)].join(',') + "\\n";
     });
     const b=new Blob([csv],{type:"text/csv"}), u=URL.createObjectURL(b), a=document.createElement("a");
     a.href=u; a.download="BotRev_Fleet_"+new Date().toISOString().split('T')[0]+".csv"; a.click();
@@ -1450,11 +1455,11 @@ async function handleRequest(request, env, ctx) {
           ? `<span style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); background:rgba(168,197,232,0.06); border:1px solid var(--border); padding:3px 8px; border-radius:4px;">✗ dismissed</span>`
           : `<span style="font-family:var(--font-mono); font-size:0.6rem; color:#f59e0b; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); padding:3px 8px; border-radius:4px;">⏳ pending</span>`;
         const actionBtns = isPending && s.id
-          ? `<div style="display:flex; gap:6px;"><button onclick="surgeAction(${s.id},'${s.audit_id}','approve',this)" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green); font-size:0.65rem; padding:4px 10px;">✓ Approve</button><button onclick="surgeAction(${s.id},'${s.audit_id}','reject',this)" class="btn btn-ghost btn-sm" style="color:var(--muted); font-size:0.65rem; padding:4px 10px;">✗</button></div>`
+          ? `<div style="display:flex; gap:6px;"><button onclick="surgeAction(${esc(s.id)},'${esc(s.audit_id)}','approve',this)" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green); font-size:0.65rem; padding:4px 10px;">✓ Approve</button><button onclick="surgeAction(${esc(s.id)},'${esc(s.audit_id)}','reject',this)" class="btn btn-ghost btn-sm" style="color:var(--muted); font-size:0.65rem; padding:4px 10px;">✗</button></div>`
           : status === 'approved' && s.actioned_cpm ? `<span style="font-family:var(--font-mono); font-size:0.65rem; color:var(--green);">@$${Number(s.actioned_cpm).toFixed(2)}</span>` : '';
-        return `<tr id="surge-row-${s.id}">
-          <td style="font-weight:600;">${s.domain_name}</td>
-          <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${s.page_path || '/'}</td>
+        return `<tr id="surge-row-${esc(s.id)}">
+          <td style="font-weight:600;">${esc(s.domain_name)}</td>
+          <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${esc(s.page_path || '/')}</td>
           <td style="font-family:var(--font-mono);">${s.hits_per_10min || 0}</td>
           <td style="font-family:var(--font-mono);">${(s.vbase||0).toFixed(1)}</td>
           <td style="font-family:var(--font-mono);">${(s.gamma||1).toFixed(1)}</td>
@@ -1462,7 +1467,7 @@ async function handleRequest(request, env, ctx) {
           <td style="font-family:var(--font-mono); color:#f59e0b; font-weight:600;">$${(s.recommended_cpm||0).toFixed(2)}</td>
           <td style="font-family:var(--font-mono); color:var(--green);">+${uplift}%</td>
           <td>${statusBadge}</td>
-          <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${s.detected_at || ''}</td>
+          <td style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">${esc(s.detected_at || '')}</td>
           <td>${actionBtns}</td>
         </tr>`;
       }).join('')}
@@ -1668,6 +1673,36 @@ async function handleRequest(request, env, ctx) {
       const pass = url.searchParams.get("pass");
       if (pass !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
 
+      // ── SINGLE PUBLISHER QUICK-ADD ──
+      if (request.method === "POST" && url.searchParams.get("mode") === "single") {
+        try {
+          const fd         = await request.formData();
+          const networkId  = (fd.get("network_id") || "").trim().toLowerCase();
+          const _auditId   = (fd.get("audit_id")    || "").trim();
+          const auditId    = _auditId || ('Audit-' + Math.random().toString(36).substring(2,8).toUpperCase());
+          const domain     = (fd.get("domain")      || "").trim();
+          const intType    = (fd.get("integration_type") || "B").trim();
+          const marketplace= (fd.get("marketplace") || "TollBit").trim();
+          const originSvr  = (fd.get("origin_server") || "").trim() || null;
+
+          if (!networkId || !domain) {
+            return new Response("Missing required fields: Network ID and Domain", { status: 400 });
+          }
+
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO publisher_entities (pub_user_id, audit_id, domain_name, integration_type, origin_server) VALUES (?, ?, ?, ?, ?)"
+          ).bind(networkId, auditId, domain, intType, originSvr).run();
+
+          await env.DB.prepare(
+            "INSERT OR IGNORE INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?)"
+          ).bind(auditId, marketplace, "").run();
+
+          return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + ADMIN_PASSWORD, 302);
+        } catch (e) {
+          return new Response("Error: " + e.message, { status: 500 });
+        }
+      }
+
       if (request.method === "POST") {
         try {
           const formData = await request.formData();
@@ -1680,7 +1715,8 @@ async function handleRequest(request, env, ctx) {
           for (const line of lines) {
             const parts = line.split(',').map(s => s.trim());
             if (parts.length < 6) continue;
-            const [net, aid, dom, mkt, key, p, intType, origin] = parts;
+            const [net, _aid, dom, mkt, key, p, intType, origin] = parts;
+            const aid = _aid.trim() || ('Audit-' + Math.random().toString(36).substring(2,8).toUpperCase());
             const integType = intType || "A";
             const originSvr = origin  || null;
 
@@ -1735,22 +1771,69 @@ async function handleRequest(request, env, ctx) {
         }
       }
 
-      return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
-<div class="wrap" style="display:flex; justify-content:center; align-items:center; min-height:100vh;">
-  <div class="card" style="width:440px;">
+      return new Response(`<!DOCTYPE html><html><head>${brandHead}<title>Onboarding — BotRev</title></head><body>
+<div class="wrap" style="display:flex; justify-content:center; align-items:flex-start; min-height:100vh; padding:48px 24px;">
+  <div style="width:100%; max-width:560px;">
     <a class="logo" href="#">Bot<span>Rev</span></a>
-    <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; color:var(--muted); margin: 8px 0 24px; text-transform:uppercase;">Fleet Onboarding</div>
-    <p style="font-size:0.8rem; color:var(--muted); margin-bottom:20px; line-height:1.6;">
-      Upload a CSV. First 6 columns required, last 2 optional:<br>
-      <code>NetworkID, AuditID, Domain, Marketplace, APIKey, AccessKey, IntegrationType, OriginServer</code><br><br>
-      <b style="color:var(--text);">IntegrationType:</b> A (Standard — CNAME Proxy) or B (Snippet — JS Tag). Defaults to A.<br>
-      <b style="color:var(--text);">OriginServer:</b> Required for Option A only.
-    </p>
-    <form method="POST" enctype="multipart/form-data">
-      <input type="file" name="csv_file" class="input" accept=".csv" required style="margin-bottom:12px;">
-      <button class="btn btn-primary" style="width:100%;">Execute Bulk Import</button>
-    </form>
-    <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost" style="width:100%; margin-top:10px; justify-content:center;">← Back to Fleet Command</a>
+    <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:2px; color:var(--muted); margin: 8px 0 32px; text-transform:uppercase;">Fleet Onboarding</div>
+
+    <!-- QUICK ADD SINGLE PUBLISHER -->
+    <div class="card" style="margin-bottom:24px; border-top:3px solid var(--green);">
+      <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:16px;">⚡ Quick Add — Single Publisher</div>
+      <form method="POST" action="${ONBOARDING_PATH}?pass=${ADMIN_PASSWORD}&mode=single">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Network ID *</label>
+            <input name="network_id" class="input" placeholder="e.g. OpsCo" required autocomplete="off">
+          </div>
+          <div>
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Audit ID <span style="color:var(--muted); font-weight:400;">(optional — auto-generated if blank)</span></label>
+            <input name="audit_id" class="input" placeholder="e.g. Audit-002 — leave blank to auto-generate" autocomplete="off">
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Domain *</label>
+          <input name="domain" class="input" placeholder="e.g. wishtv.com" required autocomplete="off">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+          <div>
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Integration Type</label>
+            <select name="integration_type" class="input" style="cursor:pointer;">
+              <option value="B">B — Snippet (JS Tag)</option>
+              <option value="A">A — Standard (CNAME)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Marketplace</label>
+            <select name="marketplace" class="input" style="cursor:pointer;">
+              <option value="TollBit">TollBit</option>
+              <option value="Dappier">Dappier</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:20px;">
+          <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Origin Server <span style="color:var(--muted); font-weight:400;">(Standard/CNAME only)</span></label>
+          <input name="origin_server" class="input" placeholder="e.g. origin.wishtv.com (leave blank for Snippet)" autocomplete="off">
+        </div>
+        <button class="btn btn-primary" style="width:100%;">+ Add Publisher</button>
+      </form>
+    </div>
+
+    <!-- BULK CSV IMPORT -->
+    <div class="card" style="border-top:3px solid var(--muted);">
+      <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:16px;">Bulk CSV Import</div>
+      <p style="font-size:0.8rem; color:var(--muted); margin-bottom:16px; line-height:1.6;">
+        No headers. Column order:<br>
+        <code style="font-size:0.72rem;">NetworkID, AuditID, Domain, Marketplace, APIKey, AccessKey, IntegrationType, OriginServer</code>
+      </p>
+      <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="csv_file" class="input" accept=".csv" required style="margin-bottom:12px;">
+        <button class="btn btn-primary" style="width:100%;">Execute Bulk Import</button>
+      </form>
+    </div>
+
+    <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost" style="width:100%; margin-top:16px; justify-content:center;">← Back to Fleet Command</a>
   </div>
 </div></body></html>`, { headers: { "Content-Type": "text/html" } });
     }
@@ -1805,20 +1888,21 @@ async function handleRequest(request, env, ctx) {
         const domainCards = await Promise.all(domains.map(async d => {
           const active  = await env.DB.prepare("SELECT timestamp FROM bot_logs WHERE audit_id = ? AND is_bot = 1 LIMIT 1").bind(d.audit_id).first();
           const dnsLive = !!active;
+          const statusLabel = dnsLive ? 'Active' : (d.integration_type === 'B' ? 'Snippet Pending' : 'DNS Pending');
           return `
           <div class="card ${dnsLive ? 'sniffer-live' : ''}">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
               <div>
-                <div style="font-weight:700; font-size:1.05rem;">${d.domain_name}</div>
-                <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); margin-top:3px;">${d.audit_id}</div>
+                <div style="font-weight:700; font-size:1.05rem;">${esc(d.domain_name)}</div>
+                <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); margin-top:3px;">${esc(d.audit_id)}</div>
                 ${isAdmin ? `<div style="font-weight:700; color:var(--text); margin-bottom:6px; font-family:var(--font-mono); font-size:0.55rem; display:inline-block; padding:2px 8px; border-radius:10px; background:${d.integration_type==='B'?'rgba(245,158,11,0.1)':'rgba(0,229,160,0.07)'}; color:${d.integration_type==='B'?'#f59e0b':'var(--green)'};">${d.integration_type==='B'?'Snippet':'Standard'}</div>` : ''}
               </div>
               <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; border:1px solid ${dnsLive?'var(--green)':'var(--border)'}; background:${dnsLive?'rgba(0,229,160,0.05)':'transparent'};">
                 <span class="dot ${dnsLive?'dot-green':'dot-gray'}"></span>
-                <span style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:${dnsLive?'var(--green)':'var(--amber)'};">${dnsLive?'DNS Active':'DNS Pending'}</span>
+                <span style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:${dnsLive?'var(--green)':'var(--amber)'};">` + statusLabel + `</span>
               </div>
             </div>
-            <a href="/domain-drilldown?audit_id=${d.audit_id}&range=${range}" class="btn btn-primary btn-sm">View Audit Log →</a>
+            <a href="/domain-drilldown?audit_id=${esc(d.audit_id)}&range=${range}" class="btn btn-primary btn-sm">View Audit Log →</a>
           </div>`;
         }));
 
