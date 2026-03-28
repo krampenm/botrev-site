@@ -310,8 +310,56 @@
       .trust-div { display: none; }
     }
     @media (max-width: 600px) {
-      .steps, .features { grid-template-columns: 1fr; }
+      /* Nav */
       .nav-links .nav-link { display: none; }
+      .nav-inner { padding: 0 16px; }
+
+      /* Hero */
+      .hero { padding: 40px 16px 36px; }
+      .hero h1 { font-size: 2rem; }
+      .hero-sub { font-size: 0.92rem; }
+      .hero-actions { flex-direction: column; }
+      .btn-hero-primary, .btn-hero-ghost { width: 100%; text-align: center; }
+
+      /* Sections */
+      .section { padding: 48px 16px; }
+      .steps, .features { grid-template-columns: 1fr; }
+      .section-inner { padding: 0; }
+
+      /* Trust strip */
+      .trust-strip { padding: 16px; }
+
+      /* Earn section */
+      .earn-grid { grid-template-columns: 1fr; }
+
+      /* CTA */
+      .cta-section { padding: 48px 16px; }
+
+      /* Footer */
+      .footer-inner { flex-direction: column; gap: 12px; text-align: center; }
+      .footer-links { justify-content: center; flex-wrap: wrap; }
+
+      /* Modal — full screen on mobile */
+      #auditModal { padding: 12px; align-items: flex-end; }
+      #auditModal > div {
+        padding: 24px 20px 32px !important;
+        border-radius: 16px 16px 0 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      /* Form name/email grid collapses to single column on small screens */
+      #auditModal div[style*="grid-template-columns:1fr 1fr"] {
+        display: block !important;
+      }
+      #auditModal div[style*="grid-template-columns:1fr 1fr"] > div {
+        margin-bottom: 16px;
+      }
+      /* Bot blocking radio buttons — stack vertically */
+      #auditModal div[style*="grid-template-columns:1fr 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
     }
   </style>
 </head>
@@ -325,6 +373,7 @@
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
         <a class="nav-link" href="#earn">Earnings</a>
+        <a class="nav-link" href="#marketplaces">Marketplaces</a>
         <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
         <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
       </div>
@@ -432,29 +481,7 @@
   </section>
 
   <!-- TRUST STRIP -->
-  <div class="trust-strip">
-    <div class="trust-inner">
-      <div class="trust-stat">
-        <div class="trust-val">43,214:1</div>
-        <div class="trust-desc">Anthropic's AI crawl requests per human referral back to publishers — Cloudflare Radar, Jan 2026</div>
-      </div>
-      <div class="trust-div"></div>
-      <div class="trust-stat">
-        <div class="trust-val">1 in 31</div>
-        <div class="trust-desc">Site visitors is now an AI bot — up from 1 in 200 just one year earlier — TollBit State of the Bots</div>
-      </div>
-      <div class="trust-div"></div>
-      <div class="trust-stat">
-        <div class="trust-val">95.7%</div>
-        <div class="trust-desc">Less traffic sent back by AI vs. traditional search — TollBit</div>
-      </div>
-      <div class="trust-div"></div>
-      <div class="trust-stat">
-        <div class="trust-val">$0 Upfront</div>
-        <div class="trust-desc">The audit is always free. No commitment required.</div>
-      </div>
-    </div>
-  </div>
+
 
   <!-- HOW IT WORKS -->
   <section class="section" id="how">
@@ -600,11 +627,43 @@
           <div class="earn-divider"></div>
           <div class="earn-summary">
             <div class="earn-summary-label">The BotRev Difference</div>
-            <div class="earn-summary-copy">Every category above is actively happening on your site right now. BotRev captures it all — building the independent audit record that gives you leverage in every future AI licensing conversation. Marketplace revenue is the floor. Direct licensing deals are the ceiling.</div>
+            <div class="earn-summary-copy">Every category above is actively happening on your site right now. BotRev captures it all — routing your bot traffic through the best-performing AI content marketplaces while building the independent audit record that positions you for direct licensing deals. Start earning from day one.</div>
           </div>
         </div>
 
       </div>
+    </div>
+  </section>
+
+  <!-- MARKETPLACE PARTNERS -->
+  <section class="section" id="marketplaces" style="padding:48px 32px;">
+    <div class="section-inner" style="text-align:center;">
+      <div class="section-eyebrow">Marketplace Agnostic</div>
+      <h2 class="section-title" style="margin-bottom:12px;">Connected to where AI companies pay for content</h2>
+      <p class="section-sub" style="max-width:600px; margin:0 auto 40px;">BotRev routes your AI traffic through the marketplaces with active AI company demand — and keeps you positioned for the direct licensing deals that are emerging with Microsoft, Amazon, and beyond. We connect you to all of them.</p>
+      <div style="display:flex; justify-content:center; align-items:center; gap:32px; flex-wrap:wrap; margin-bottom:16px;">
+        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
+          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">TollBit</div>
+          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
+        </div>
+        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
+          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Microsoft PCM</div>
+          <div style="font-size:0.7rem; color:var(--muted);">Publisher Content Marketplace</div>
+        </div>
+        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
+          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Amazon</div>
+          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
+        </div>
+        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
+          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Dappier</div>
+          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
+        </div>
+        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
+          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">ProRata</div>
+          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
+        </div>
+      </div>
+      <p style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); letter-spacing:1px;">MORE MARKETPLACES ADDED REGULARLY · BOTREV ROUTES TO WHERE DEMAND IS HIGHEST</p>
     </div>
   </section>
 
