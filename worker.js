@@ -1,71 +1,39 @@
 /**
- * BotRev Cloudflare Worker — dash.botrev.com
- * Bot Sniffer | Full AOR Infrastructure | Marketplace-Agnostic Routing
- * Version 27.2 — March 2026
+ * BotRev Cloudflare Worker — Combined Monolithic Worker
+ * Bot Sniffer | Publisher Domain Intercept | Dashboard UI | Admin Portal
+ * Version 28.1 (Combined) — March 2026
  *
- * CHANGES FROM v27.1 — SECURITY HARDENING:
- *   - Admin rate limiting: max 10 requests/min per IP across all /api/admin/* endpoints
- *       Uses D1 admin_requests table. Brute-force and credential stuffing protection.
- *       New D1 migration required: see SQL below.
- *   - HMAC-signed surge action tokens: approve/reject URLs now contain a cryptographic
- *       HMAC-SHA256 signature + 30-minute expiry. Old/intercepted email links cannot be
- *       replayed. Signing key derived from env.ADMIN_PASS.
- *   - Tamper-evident audit log: each bot_logs entry stores a SHA-256 hash chained to
- *       the previous entry. Any modification to historical records is detectable.
- *       New D1 migration required: ALTER TABLE bot_logs ADD COLUMN entry_hash TEXT.
- *   - Morgan123 fallback removed: env.ADMIN_PASS is now required. If not set, all admin
- *       routes return 503 with a clear error. Forces proper secret rotation.
- *   - Origin validation on publisher onboarding: BotRev verifies the publisher's origin
- *       server is reachable before writing them to D1. Prevents misconfigured publishers
- *       going live silently.
- *   - Admin request logging: all admin route hits logged to D1 with IP + path for audit.
+ * This is the combined v28.1 worker — a single export default with one
+ * handleRequest function, merging the bot interception worker and the
+ * dashboard Pages function back into a monolithic deployment.
  *
- * NEW D1 MIGRATIONS REQUIRED (run in Cloudflare D1 console before deploying v27.2):
- *   CREATE TABLE IF NOT EXISTS admin_requests (
- *     id INTEGER PRIMARY KEY AUTOINCREMENT,
- *     ip TEXT NOT NULL,
- *     path TEXT,
- *     ts TEXT DEFAULT (datetime('now'))
- *   );
- *   CREATE INDEX IF NOT EXISTS idx_admin_ip_ts ON admin_requests(ip, ts);
- *   ALTER TABLE bot_logs ADD COLUMN entry_hash TEXT;
+ * Features:
+ *   - Publisher domain bot detection, classification, logging, and routing
+ *   - TollBit log sink (batched)
+ *   - Surge Intelligence detection and email alerts
+ *   - /api/sniff endpoint (JS snippet integration)
+ *   - /health endpoint (monitoring)
+ *   - Admin Fleet Command, Surge Intelligence admin panel
+ *   - Publisher dashboard, domain drilldown, marketplace drilldown
+ *   - Onboarding, login, session token auth (HttpOnly cookies)
+ *   - Claude-powered audit report generation
  *
- * CHANGES FROM v27:
- *   - Stealth crawler heuristic tightened: added Sec-Fetch-* header as 4th signal,
- *     requires desktop browser UA pattern (OS + engine), threshold raised to <2 of 4.
- *     Eliminates false positives from CDN health checks and API clients.
- *   - T5 training callout now uses same date filter as tier breakdown (7/30/all time
- *     are now consistent — previously callout always queried all-time)
- *   - Domain drilldown: reclassified null UAs now fall back to T4 (not stale DB tier)
- *     eliminates v26 T1 false positives for human-looking UAs
- *   - "Est. Recovery Potential" renamed to "Net Revenue (Publisher Share)" across
- *     publisher dashboard and domain drilldown, with "After 30% BotRev management fee" note
- *   - T5 · Training tier added ($0 CPM, logged only — TollBit gap → BotRev Training Deals)
- *       Training bots are classified FIRST before all other tiers so a training bot
- *       can never accidentally land in a monetizable tier. They pass through to origin
- *       with no TollBit redirect.
- *   - 20 training bot UA tokens (GPTBot, anthropic-ai, CCBot, Bytespider,
- *       Google-Extended, FacebookBot, meta-externalagent, Applebot-Extended,
- *       cohere-ai, cohere-training-data-crawler, DeepSeekBot, Diffbot, Omgili,
- *       img2dataset, Google-CloudVertexBot, CloudVertexBot, FriendlyCrawler,
- *       iaskspider, magpie-crawler, webzio-extended)
- *   - Top-level try/catch passthrough fallback added to fetch()
- *       Bot errors → 503. Human traffic → silent pass-through to origin.
- *       Publisher human traffic is protected even if the Worker throws.
- *   - ADMIN_PASSWORD moved to env.ADMIN_PASS (Cloudflare secret)
- *       Rotate via: Cloudflare Workers → Settings → Variables & Secrets → ADMIN_PASS
- *   - D1 bot_logs table: is_training flag added (1 for T5, 0 for all others)
- *   - Publisher dashboard: T5 tier row added to tier breakdown
- *   - Publisher dashboard: training gap callout when T5 hits > 0
- *   - Admin Fleet Command: T5 unmonetized hit count + training revenue gap card
- *   - Surge Intelligence: T5 hits excluded from V10 calculation (training bots
- *       don't represent demand spikes — they're bulk crawlers)
- *   - Surge alert email: pass updated to use env.ADMIN_PASS (no hardcoded URL)
+ * Changelog v28.1:
+ *   - SECURITY: Remove admin password from surge alert email links.
+ *     Admin must now authenticate via the dashboard login page.
+ *   - FIX: Remove meta-externalagent from TRAINING_BOT_TOKENS — it is a Meta AI
+ *     inference bot, not a training crawler.
+ *   - Session token authentication: admin password no longer appears in
+ *     URLs, HTML source, or browser history. Uses HttpOnly session cookies
+ *     with HMAC-signed tokens.
+ *   - Login rate limiting to prevent brute-force attacks.
+ *   - HTML escaping (escHtml) to prevent XSS from attacker-controlled UA strings.
  *
  * WORKER SECRETS REQUIRED (Cloudflare Workers → Settings → Variables & Secrets):
- *   TOLLBIT_KEY    — TollBit org-level log sink auth key
- *   RESEND_API_KEY — Resend email API key for surge alerts
- *   ADMIN_PASS     — Admin portal password (NEW — rotate before publisher #2)
+ *   TOLLBIT_KEY        — TollBit org-level log sink auth key
+ *   RESEND_API_KEY     — Resend email API key for surge alerts
+ *   ADMIN_PASS         — Admin portal password
+ *   ANTHROPIC_API_KEY  — Claude API key for report generation
  *
  * BINDINGS REQUIRED in wrangler.toml:
  *   [[d1_databases]]
@@ -196,6 +164,54 @@ async function checkAdminRateLimit(ip, path, env) {
   }
 }
 
+// ── v28.1 SESSION TOKEN AUTHENTICATION ──────────────────────────────────────
+// Replaces pass= query parameters with HttpOnly session cookies.
+// Admin password no longer appears in HTML source, browser history, or URLs.
+
+const SESSION_COOKIE_NAME = 'botrev_session';
+const SESSION_EXPIRY_HOURS = 8;
+
+async function createSessionToken(adminPass) {
+  const expires = Date.now() + (SESSION_EXPIRY_HOURS * 60 * 60 * 1000);
+  const payload = `admin:${expires}`;
+  const sig = await hmacSign(payload, adminPass);
+  return `${payload}:${sig}`;
+}
+
+async function verifySessionToken(token, adminPass) {
+  if (!token || !adminPass) return false;
+  const parts = token.split(':');
+  if (parts.length < 3) return false;
+  const [role, expiresStr, sig] = [parts[0], parts[1], parts.slice(2).join(':')];
+  const payload = `${role}:${expiresStr}`;
+  const valid = await hmacVerify(payload, sig, adminPass);
+  if (!valid) return false;
+  const expires = parseInt(expiresStr, 10);
+  if (Date.now() > expires) return false;
+  return true;
+}
+
+function getSessionCookie(request) {
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const match = cookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function sessionCookieHeader(token) {
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_EXPIRY_HOURS * 3600}`;
+}
+
+async function isAdminAuthenticated(request, env) {
+  // Check session cookie first
+  const token = getSessionCookie(request);
+  if (token && await verifySessionToken(token, env.ADMIN_PASS)) return true;
+  // Legacy fallback: check pass= query param (for backward compat during transition)
+  const url = new URL(request.url);
+  const pass = url.searchParams.get('pass');
+  if (pass && pass === env.ADMIN_PASS) return true;
+  return false;
+}
+
 // ── T5 TRAINING BOT FINGERPRINTS (MODULE LEVEL) ─────────────────────────────
 // These crawlers collect content for LLM model training.
 // TollBit does NOT monetize these. Logged at $0 CPM, passed to origin.
@@ -204,6 +220,8 @@ async function checkAdminRateLimit(ip, path, env) {
 // Sources: OpenAI, Anthropic, Google, Meta, ByteDance, Common Crawl
 // official documentation + verified server log analysis (2026).
 // CHECKED FIRST in classifyBot() — training bots must never land in T1-T4.
+//
+// v28.1 FIX: meta-externalagent REMOVED — it is Meta's inference bot, not training.
 const TRAINING_BOT_TOKENS = [
   // OpenAI — training (distinct from ChatGPT-User which is inference/retrieval)
   'gptbot',
@@ -211,9 +229,8 @@ const TRAINING_BOT_TOKENS = [
   'anthropic-ai',
   // Google — Gemini training opt-out agent
   'google-extended',
-  // Meta — LLM training
+  // Meta — LLM training (meta-externalagent is inference, handled in T1)
   'facebookbot',
-  'meta-externalagent',
   // ByteDance / TikTok — LLMs including Doubao
   'bytespider',
   // Common Crawl — open dataset used by many LLMs for training
@@ -238,6 +255,8 @@ const TRAINING_BOT_TOKENS = [
   'magpie-crawler',
   'webzio-extended',
 ];
+
+// ── TOLLBIT LOG BUILDING AND BATCHING ────────────────────────────────────────
 
 function buildTollBitLog(request, responseStatus, tier, isStealthFlag) {
   const cf = request.cf ? { ...request.cf } : {};
@@ -318,7 +337,7 @@ function enqueueTollBitLog(logEntry, tollbitKey, ctx) {
   }
 }
 
-// ── SURGE INTELLIGENCE — CONSTANTS ──────────────────────────────────────────
+// ── SURGE INTELLIGENCE — CONSTANTS AND FUNCTIONS ─────────────────────────────
 const SURGE_BETA_DEFAULT      = 1.5;
 const SURGE_FLOOR_CPM_DEFAULT = 3.0;
 const SURGE_PLATFORM_BASELINE = 10;
@@ -385,10 +404,6 @@ async function evaluateSurge(auditId, hostname, reqPath, env, ctx) {
     const upliftPct = ((pt - pfloor) / pfloor * 100).toFixed(1);
 
     // v27.2 FIX: Check throttle BEFORE inserting.
-    // Previous logic inserted first then checked — this caused a flood of
-    // surge_events rows (one per bot request) while still never sending email.
-    // Now: check if we've already sent an alert or logged a surge in the last
-    // 4 hours. If so, skip entirely — no insert, no email.
     const recentCount = await env.DB.prepare(
       `SELECT COUNT(*) as cnt FROM surge_events
        WHERE audit_id = ? AND detected_at > datetime('now', '-4 hours')`
@@ -398,7 +413,6 @@ async function evaluateSurge(auditId, hostname, reqPath, env, ctx) {
 
     // v27.2 FIX: Also check minimum insert interval — 2 minutes between
     // any two surge_events rows regardless of alert status.
-    // Prevents rapid-fire inserts during a sustained surge.
     const lastInsert = await env.DB.prepare(
       `SELECT detected_at FROM surge_events
        WHERE audit_id = ? ORDER BY detected_at DESC LIMIT 1`
@@ -520,9 +534,9 @@ async function sendSurgeAlert(env, d) {
       </table>
       <div style="font-size:11px; color:#475569; text-align:center; line-height:1.6;">Approve applies the recommended rate via partner API. Rate resets to floor CPM after next evaluation window.</div>
     </div>
-    ` : `<a style="display:block; text-align:center; background:#00a896; color:#fff; text-decoration:none; padding:14px 24px; border-radius:8px; font-weight:700; font-size:15px; margin-bottom:12px;" href="https://dash.botrev.com/admin-surge?pass=${adminPass}">View in Surge Intelligence →</a>`}
+    ` : `<a style="display:block; text-align:center; background:#00a896; color:#fff; text-decoration:none; padding:14px 24px; border-radius:8px; font-weight:700; font-size:15px; margin-bottom:12px;" href="https://dash.botrev.com/admin-surge">View in Surge Intelligence →</a>`}
 
-    <a href="https://dash.botrev.com/admin-surge?pass=${adminPass}" style="display:block; text-align:center; font-size:13px; color:#64748b; text-decoration:none;">View full Surge Intelligence dashboard →</a>
+    <a href="https://dash.botrev.com/admin-surge" style="display:block; text-align:center; font-size:13px; color:#64748b; text-decoration:none;">View full Surge Intelligence dashboard →</a>
   </div>
 
   <div style="font-size:11px; color:#334155; text-align:center; margin-top:32px;">BotRev Surge Intelligence · Phase 2 — One-Click Approval Active<br>Phase 3 (full automation) coming soon.</div>
@@ -543,15 +557,277 @@ async function sendSurgeAlert(env, d) {
   }).catch(() => {});
 }
 
+// ── BOT DISPLAY NAME MAPPING ─────────────────────────────────────────────────
+// Maps raw User-Agent tokens to human-readable company/product names.
+const BOT_DISPLAY_NAMES = [
+  // ── OpenAI ──
+  { match: /chatgpt-user/i,           name: "ChatGPT",                  company: "OpenAI",        icon: "🤖" },
+  { match: /gptbot/i,                 name: "GPT Training Crawler",      company: "OpenAI",        icon: "🤖" },
+  { match: /oai-searchbot/i,          name: "SearchGPT",                 company: "OpenAI",        icon: "🔍" },
+  // ── Anthropic ──
+  { match: /claudebot/i,              name: "Claude",                    company: "Anthropic",     icon: "🤖" },
+  { match: /claude-web/i,             name: "Claude Web",                company: "Anthropic",     icon: "🤖" },
+  { match: /anthropic-ai/i,           name: "Claude Training Crawler",   company: "Anthropic",     icon: "🤖" },
+  // ── Google ──
+  { match: /googlebot/i,              name: "Googlebot",                 company: "Google",        icon: "🔍" },
+  { match: /google-extended/i,        name: "Google AI Training",        company: "Google",        icon: "🤖" },
+  { match: /googleother/i,            name: "Google Other Crawler",      company: "Google",        icon: "🔍" },
+  { match: /google-inspectiontool/i,  name: "Google Inspection",         company: "Google",        icon: "🔍" },
+  { match: /gemini/i,                 name: "Gemini",                    company: "Google",        icon: "🤖" },
+  // ── Microsoft / Bing ──
+  { match: /bingbot/i,                name: "Bingbot",                   company: "Microsoft",     icon: "🔍" },
+  { match: /msnbot/i,                 name: "MSN Bot",                   company: "Microsoft",     icon: "🔍" },
+  { match: /bingpreview/i,            name: "Bing Preview",              company: "Microsoft",     icon: "🔍" },
+  // ── Perplexity ──
+  { match: /perplexitybot/i,          name: "Perplexity AI",             company: "Perplexity",    icon: "🔍" },
+  { match: /perplexity/i,             name: "Perplexity AI",             company: "Perplexity",    icon: "🔍" },
+  // ── Meta — specific patterns first (FBAN = Facebook in-app browser) ──
+  { match: /meta-externalads/i,       name: "Meta Ad Crawler",           company: "Meta",          icon: "🔍" },
+  { match: /meta-externalagent/i,     name: "Meta AI Agent",             company: "Meta",          icon: "🤖" },
+  { match: /facebookbot/i,            name: "Meta AI Training",          company: "Meta",          icon: "🤖" },
+  { match: /facebookexternalhit/i,    name: "Facebook Link Preview",     company: "Meta",          icon: "🔍" },
+  { match: /FBAN\/FB4A/,              name: "Facebook In-App Browser",   company: "Meta",          icon: "🔍" },
+  { match: /FBAN\/Orca/,              name: "Messenger In-App Browser",  company: "Meta",          icon: "🔍" },
+  { match: /Barcelona/,               name: "Threads In-App Browser",    company: "Meta",          icon: "🔍" },
+  { match: /Instagram/i,              name: "Instagram In-App Browser",  company: "Meta",          icon: "🔍" },
+  // ── Amazon ──
+  { match: /amazon-kendra/i,          name: "Amazon Kendra AI",          company: "Amazon",        icon: "🤖" },
+  { match: /amazon-quick/i,           name: "Amazon Kendra AI",          company: "Amazon",        icon: "🤖" },
+  { match: /amazonbot/i,              name: "Amazonbot",                 company: "Amazon",        icon: "🔍" },
+  // ── Apple ──
+  { match: /applebot/i,               name: "Applebot",                  company: "Apple",         icon: "🔍" },
+  // ── ByteDance / TikTok ──
+  { match: /bytespider/i,             name: "ByteDance AI Training",     company: "ByteDance",     icon: "🤖" },
+  { match: /tiktokspider/i,           name: "TikTok Crawler",            company: "ByteDance",     icon: "🔍" },
+  // ── DuckDuckGo ──
+  { match: /duckassistbot/i,          name: "DuckDuckGo AI Assistant",   company: "DuckDuckGo",    icon: "🤖" },
+  { match: /duckduckbot/i,            name: "DuckDuckBot",               company: "DuckDuckGo",    icon: "🔍" },
+  { match: /duckduckgo/i,             name: "DuckDuckGo",                company: "DuckDuckGo",    icon: "🔍" },
+  // ── Yandex ──
+  { match: /yandexbot/i,              name: "YandexBot",                 company: "Yandex",        icon: "🔍" },
+  { match: /yandex/i,                 name: "Yandex",                    company: "Yandex",        icon: "🔍" },
+  // ── Yahoo ──
+  { match: /yahoo.*slurp/i,           name: "Yahoo Search Crawler",      company: "Yahoo",         icon: "🔍" },
+  // ── LinkedIn ──
+  { match: /linkedinbot/i,            name: "LinkedIn Bot",              company: "LinkedIn",      icon: "🔍" },
+  // ── Common Crawl ──
+  { match: /ccbot/i,                  name: "Common Crawl",              company: "Common Crawl",  icon: "🤖" },
+  // ── Huawei / Petal Search ──
+  { match: /petalbot/i,               name: "Petal Search Bot",          company: "Huawei",        icon: "🔍" },
+  // ── Semrush ──
+  { match: /siteauditbot/i,           name: "Site Audit Bot",            company: "Semrush",       icon: "🔍" },
+  { match: /semrushbot/i,             name: "SEMrush Bot",               company: "Semrush",       icon: "🔍" },
+  // ── Ahrefs ──
+  { match: /ahrefsbot/i,              name: "Ahrefs Bot",                company: "Ahrefs",        icon: "🔍" },
+  // ── Majestic ──
+  { match: /mj12bot/i,                name: "Majestic Bot",              company: "Majestic",      icon: "🔍" },
+  // ── QuillBot (AI writing assistant) ──
+  { match: /quillbot/i,               name: "QuillBot AI",               company: "QuillBot",      icon: "🤖" },
+  // ── Paqle (Danish search) ──
+  { match: /paqlebot/i,               name: "Paqle Search Bot",          company: "Paqle",         icon: "🔍" },
+  // ── Ground News (news aggregator app) ──
+  { match: /ground news/i,            name: "Ground News App",           company: "Ground News",   icon: "🔍" },
+  // ── HanaleiBot (unknown, beta) ──
+  { match: /hanaleibot/i,             name: "HanaleiBot (Beta)",         company: "Unknown",       icon: "🤖" },
+  // ── ContextualBot ──
+  { match: /contextualbot/i,          name: "ContextualBot",             company: "Outcomes.net",  icon: "🔍" },
+  // ── SEBot-WA ──
+  { match: /sebot-wa/i,               name: "SEBot",                     company: "Unknown",       icon: "🔍" },
+  // ── Headless Chrome / Automation (must come after named bots) ──
+  { match: /headlesschrome/i,         name: "Headless Chrome",           company: "Automation",    icon: "⚡" },
+  { match: /puppeteer/i,              name: "Puppeteer",                 company: "Automation",    icon: "⚡" },
+  { match: /playwright/i,             name: "Playwright",                company: "Automation",    icon: "⚡" },
+  { match: /selenium/i,               name: "Selenium",                  company: "Automation",    icon: "⚡" },
+  { match: /phantomjs/i,              name: "PhantomJS",                 company: "Automation",    icon: "⚡" },
+];
+
+function getBotDisplayName(rawUA) {
+  if (!rawUA) return { name: "Unknown Bot", company: "Unknown", icon: "🤖", raw: rawUA };
+  for (const entry of BOT_DISPLAY_NAMES) {
+    if (entry.match.test(rawUA)) {
+      return { name: entry.name, company: entry.company, icon: entry.icon, raw: rawUA };
+    }
+  }
+  // Fallback: use first meaningful token from UA string
+  const firstToken = rawUA.split(/[\/\s]/)[0];
+  return { name: firstToken || rawUA.substring(0, 40), company: "Unknown", icon: "🤖", raw: rawUA };
+}
+
+// ── HTML + TEMPLATE LITERAL ESCAPE HELPERS ───────────────────────────────────
+// escHtml: Escapes HTML special characters to prevent XSS when injecting
+// DB values (including attacker-controlled User-Agent strings) into HTML.
+const escHtml = s => String(s || "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#39;");
+
+// esc: Legacy alias — all callsites now go through escHtml which handles
+// both HTML injection and template literal safety (< and $ are escaped).
+const esc = escHtml;
+
+// ══════════════════════════════════════════════════════════════════
+// EXPORT DEFAULT — TOP-LEVEL TRY/CATCH PASSTHROUGH FALLBACK
+// ══════════════════════════════════════════════════════════════════
+
+// ============================================================
+// DOCX REPORT GENERATOR — Worker compatible, no npm deps
+// Pure JS ZIP (CRC32 STORE) + OOXML 2007 strict schema
+// ============================================================
+const _CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c;
+  }
+  return t;
+})();
+
+function _crc32(buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) crc = _CRC_TABLE[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function _buildZip(files) {
+  const enc = s => new TextEncoder().encode(s);
+  const parts = [], cd = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const nb = enc(name);
+    const data = typeof content === 'string' ? enc(content) : content;
+    const crc = _crc32(data);
+    const sz = data.length;
+    const lh = new Uint8Array(30 + nb.length);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true); lv.setUint16(4,20,true); lv.setUint16(6,0,true);
+    lv.setUint16(8,0,true); lv.setUint16(10,0,true); lv.setUint16(12,0,true);
+    lv.setUint32(14,crc,true); lv.setUint32(18,sz,true); lv.setUint32(22,sz,true);
+    lv.setUint16(26,nb.length,true); lv.setUint16(28,0,true);
+    lh.set(nb, 30);
+    parts.push(lh, data);
+    const ce = new Uint8Array(46 + nb.length);
+    const cv = new DataView(ce.buffer);
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true);
+    cv.setUint16(8,0,true); cv.setUint16(10,0,true); cv.setUint16(12,0,true); cv.setUint16(14,0,true);
+    cv.setUint32(16,crc,true); cv.setUint32(20,sz,true); cv.setUint32(24,sz,true);
+    cv.setUint16(28,nb.length,true); cv.setUint16(30,0,true); cv.setUint16(32,0,true);
+    cv.setUint16(34,0,true); cv.setUint16(36,0,true); cv.setUint32(38,0,true); cv.setUint32(42,offset,true);
+    ce.set(nb, 46);
+    cd.push(ce);
+    offset += lh.length + data.length;
+  }
+  const cdbParts = cd;
+  let cdLen = 0; cdbParts.forEach(c => cdLen += c.length);
+  const eor = new Uint8Array(22);
+  const ev = new DataView(eor.buffer);
+  ev.setUint32(0,0x06054b50,true); ev.setUint16(4,0,true); ev.setUint16(6,0,true);
+  ev.setUint16(8,cd.length,true); ev.setUint16(10,cd.length,true);
+  ev.setUint32(12,cdLen,true); ev.setUint32(16,offset,true); ev.setUint16(20,0,true);
+  const all = [...parts, ...cdbParts, eor];
+  let total = 0; all.forEach(a => total += a.length);
+  const out = new Uint8Array(total); let pos = 0;
+  all.forEach(a => { out.set(a, pos); pos += a.length; });
+  return out;
+}
+
+const _DNAVY='1E3A5F', _DGREEN='10B981', _DAMBER='F59E0B', _DMUTED='5A7FA8', _DWHITE='FFFFFF';
+const _dEsc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const _dRun = (text, {bold=false,size=20,color=_DNAVY}={}) =>
+  `<w:r><w:rPr>${bold?'<w:b/>':''}<w:color w:val="${color}"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/></w:rPr><w:t xml:space="preserve">${_dEsc(text)}</w:t></w:r>`;
+const _dPara = (content, {align='',before=80,after=80,borderBottom='',borderTop='',indent=0}={}) => {
+  const bdr = borderBottom?`<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="${borderBottom}"/></w:pBdr>`:borderTop?`<w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="${borderTop}"/></w:pBdr>`:'';
+  const jc = align?`<w:jc w:val="${align}"/>`:'';
+  const ind = indent?`<w:ind w:left="${indent}" w:hanging="240"/>`:'';
+  return `<w:p><w:pPr>${bdr}<w:spacing w:before="${before}" w:after="${after}"/>${ind}${jc}</w:pPr>${content}</w:p>`;
+};
+const _dTcPr = (w, fill, padH=160, padV=80) =>
+  `<w:tcPr><w:tcW w:w="${w}" w:type="dxa"/><w:shd w:val="clear" w:fill="${fill}"/><w:tcMar><w:top w:w="${padV}" w:type="dxa"/><w:start w:w="${padH}" w:type="dxa"/><w:bottom w:w="${padV}" w:type="dxa"/><w:end w:w="${padH}" w:type="dxa"/></w:tcMar></w:tcPr>`;
+
+function buildReportDocx(data) {
+  const {publisher, auditId, period, integration, date, totalHits, estNetRevenue,
+         stealthCount, trainingCount, topBots, reportText} = data;
+
+  const coverRow = (label, value, hl=false) => `<w:tr>
+    <w:tc>${_dTcPr(2800,'F0F7FF')}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>${_dRun(label,{bold:true,size:18})}</w:p></w:tc>
+    <w:tc>${_dTcPr(6560,hl?'E6FAF4':'FFFFFF')}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>${_dRun(value,{size:18,color:hl?'0D7F5F':_DNAVY,bold:hl})}</w:p></w:tc>
+  </w:tr>`;
+
+  const statCell = (value, label) => `<w:tc>${_dTcPr(2340,'E6FAF4',160,120)}
+    <w:p><w:pPr><w:spacing w:before="0" w:after="60"/><w:jc w:val="center"/></w:pPr>${_dRun(value,{bold:true,size:40,color:_DGREEN})}</w:p>
+    <w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr>${_dRun(label,{size:16,color:_DMUTED})}</w:p>
+  </w:tc>`;
+
+  const bhc = (text,w,align='left') =>
+    `<w:tc>${_dTcPr(w,_DNAVY,120,80)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="${align}"/></w:pPr>${_dRun(text,{bold:true,size:17,color:_DWHITE})}</w:p></w:tc>`;
+
+  const botRow = (bot, idx) => {
+    const bg = idx%2===0?'FFFFFF':'F0F7FF';
+    const tc = w => `<w:tcPr><w:tcW w:w="${w}" w:type="dxa"/><w:shd w:val="clear" w:fill="${bg}"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>`;
+    const tc2 = bot.tier===1?_DGREEN:bot.tier===5?_DAMBER:_DMUTED;
+    const rev = bot.tier===5?'$0.0000 ⚡':`$${bot.revenue}`;
+    const rc = bot.tier===5?_DAMBER:_DGREEN;
+    return `<w:tr>
+      <w:tc>${tc(3800)}<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>${_dRun(bot.name,{bold:true,size:18})}</w:p>
+        <w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>${_dRun(bot.company,{size:15,color:_DMUTED})}</w:p></w:tc>
+      <w:tc>${tc(1200)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr>${_dRun(`T${bot.tier}`,{bold:true,size:17,color:tc2})}</w:p></w:tc>
+      <w:tc>${tc(1800)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="right"/></w:pPr>${_dRun(Number(bot.hits).toLocaleString(),{size:18,color:'2D3748'})}</w:p></w:tc>
+      <w:tc>${tc(2560)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="right"/></w:pPr>${_dRun(rev,{size:18,color:rc})}</w:p></w:tc>
+    </w:tr>`;
+  };
+
+  const parseBody = text => text.split('\n').map(line => {
+    const t = line.trim();
+    if (!t) return '<w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr></w:p>';
+    if (/^[A-Z][A-Z\s\-—:]+$/.test(t) && t.length > 4)
+      return _dPara(_dRun(t,{bold:true,size:24,color:_DNAVY}),{before:360,after:100,borderBottom:_DGREEN});
+    if (t.startsWith('→')||t.startsWith('•')||/^\d+\./.test(t))
+      return _dPara(_dRun('→  ',{bold:true,size:20,color:_DGREEN})+_dRun(t.replace(/^[→•\d.]\s*/,''),{size:20,color:'2D3748'}),{before:60,after:60,indent:480});
+    return _dPara(_dRun(t,{size:20,color:'2D3748'}),{before:80,after:80});
+  }).join('\n');
+
+  const BORDERS_LIGHT = `<w:tblBorders><w:top w:val="single" w:sz="1" w:color="D5E8F0"/><w:start w:val="single" w:sz="1" w:color="D5E8F0"/><w:bottom w:val="single" w:sz="1" w:color="D5E8F0"/><w:end w:val="single" w:sz="1" w:color="D5E8F0"/><w:insideH w:val="single" w:sz="1" w:color="D5E8F0"/><w:insideV w:val="single" w:sz="1" w:color="D5E8F0"/></w:tblBorders>`;
+  const BORDERS_GREEN = `<w:tblBorders><w:top w:val="single" w:sz="2" w:color="${_DGREEN}"/><w:start w:val="single" w:sz="2" w:color="${_DGREEN}"/><w:bottom w:val="single" w:sz="2" w:color="${_DGREEN}"/><w:end w:val="single" w:sz="2" w:color="${_DGREEN}"/><w:insideV w:val="single" w:sz="2" w:color="${_DGREEN}"/></w:tblBorders>`;
+
+  const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+${_dPara(_dRun('Bot',{bold:true,size:72,color:_DGREEN})+_dRun('Rev',{bold:true,size:72,color:_DMUTED}),{before:0,after:40})}
+${_dPara(_dRun('Content Intelligence Audit Report',{bold:true,size:36,color:_DNAVY}),{before:0,after:320,borderBottom:_DGREEN})}
+<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/>${BORDERS_LIGHT}</w:tblPr>
+<w:tblGrid><w:gridCol w:w="2800"/><w:gridCol w:w="6560"/></w:tblGrid>
+${coverRow('Publisher',publisher,true)}${coverRow('Audit ID',auditId)}${coverRow('Period',period)}${coverRow('Integration',integration)}${coverRow('Date',date)}
+</w:tbl>
+<w:p><w:pPr><w:spacing w:before="320" w:after="120"/></w:pPr></w:p>
+<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/>${BORDERS_GREEN}</w:tblPr>
+<w:tblGrid><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/><w:gridCol w:w="2340"/></w:tblGrid>
+<w:tr>${statCell(Number(totalHits).toLocaleString(),'Total Bot Hits')}${statCell('$'+Number(estNetRevenue).toFixed(2),'Est. Net Revenue')}${statCell(Number(stealthCount).toLocaleString(),'Stealth Crawlers')}${statCell(Number(trainingCount).toLocaleString(),'Training Hits ⚡')}</w:tr>
+</w:tbl>
+${_dPara(_dRun('TOP BOT BREAKDOWN',{bold:true,size:24,color:_DNAVY}),{before:360,after:120,borderBottom:_DGREEN})}
+<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr>
+<w:tblGrid><w:gridCol w:w="3800"/><w:gridCol w:w="1200"/><w:gridCol w:w="1800"/><w:gridCol w:w="2560"/></w:tblGrid>
+<w:tr>${bhc('Bot / Company',3800,'left')}${bhc('Tier',1200,'center')}${bhc('Hits',1800,'right')}${bhc('Est. Net Revenue',2560,'right')}</w:tr>
+${(topBots||[]).map((b,i)=>botRow(b,i)).join('')}
+</w:tbl>
+<w:p><w:pPr><w:spacing w:before="360" w:after="0"/></w:pPr></w:p>
+${parseBody(reportText||'')}
+${_dPara(_dRun('Confidential — Prepared by BotRev LLC  ·  botrev.com',{size:16,color:_DMUTED}),{before:480,after:0,borderTop:'D5E8F0'})}
+<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1260" w:bottom="1080" w:left="1260" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
+</w:body></w:document>`;
+
+  return _buildZip({
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+    'word/_rels/document.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    'word/document.xml': xml,
+  });
+}
+// ── END DOCX GENERATOR ──────────────────────────────────────────────────────
+
 export default {
   async fetch(request, env, ctx) {
-
-    // ══════════════════════════════════════════════════════════════
-    // v27 — TOP-LEVEL TRY/CATCH PASSTHROUGH FALLBACK
-    // If the Worker errors for any reason, human traffic is protected.
-    // Bots get a 503. Humans are silently passed to origin.
-    // Publisher revenue is never blocked by a Worker bug.
-    // ══════════════════════════════════════════════════════════════
     try {
       return await handleRequest(request, env, ctx);
     } catch (err) {
@@ -580,10 +856,6 @@ export default {
 // ══════════════════════════════════════════════════════════════════
 // MAIN REQUEST HANDLER — extracted for clean try/catch wrapping
 // ══════════════════════════════════════════════════════════════════
-// ── TEMPLATE LITERAL ESCAPE HELPER ──────────────────────────────────────────
-// Escapes backticks and ${ sequences in DB values before injecting into
-// template literals. Prevents SyntaxErrors when DB data contains special chars.
-const esc = s => String(s || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 
 async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
@@ -591,8 +863,6 @@ async function handleRequest(request, env, ctx) {
     if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
 
     // v27.2: ADMIN_PASSWORD is now required — no fallback to Morgan123.
-    // If env.ADMIN_PASS is not set, admin routes return 503 with a clear error.
-    // Rotate via: Cloudflare Workers → Settings → Variables & Secrets → ADMIN_PASS (encrypted)
     const ADMIN_PASSWORD = env.ADMIN_PASS;
     if (!ADMIN_PASSWORD && (path.startsWith('/admin') || path.startsWith('/api/admin'))) {
       return new Response(
@@ -600,6 +870,7 @@ async function handleRequest(request, env, ctx) {
         { status: 503, headers: { 'Content-Type': 'application/json' } }
       );
     }
+
     const SECRET_ADMIN_PATH = "/admin-portal-access";
     const ONBOARDING_PATH   = "/admin-onboard-client";
     const SURGE_ADMIN_PATH  = "/admin-surge";
@@ -607,25 +878,23 @@ async function handleRequest(request, env, ctx) {
 
     // CPM Recovery Tiers (value per single hit)
     const TIERS = {
-      TIER1: 20.00 / 1000,   // T1 · Premium AI
-      TIER2: 10.00 / 1000,   // T2 · Headless
-      TIER3:  5.00 / 1000,   // T3 · Verified Search
-      TIER4:  1.00 / 1000,   // T4 · General/Utility
-      TIER5:  0.00 / 1000,   // T5 · Training (TollBit gap — $0 CPM, logged only)
+      TIER1: 10.00 / 1000,   // T1 · Premium AI — TollBit CEO cited $10–$15 CPM (Business Standard, Mar 2026)
+      TIER2:  2.00 / 1000,   // T2 · Headless — automation/scraping, lower marketplace demand
+      TIER3:  0.00 / 1000,   // T3 · Verified Search (pass-through — protects publisher SEO)
+      TIER4:  0.25 / 1000,   // T4 · General/Utility — minimal marketplace value
+      TIER5:  0.00 / 1000,   // T5 · Training ($0 CPM across all marketplaces — industry gap, not TollBit-specific. Direct licensing is the only path to revenue for training bots.)
     };
 
     const DAMPER_WINDOW_MINUTES  = 10;
     const DAMPER_SURGE_MULTIPLIER = 4;
 
     // ============================================================
-    // 2. TIER DETECTION ENGINE (Bot Sniffer)
+    // 2. TIER DETECTION ENGINE (Bot Sniffer) — closure-based, TIERS in scope
     // ============================================================
     function classifyBot(ua = "") {
       const l = ua.toLowerCase();
 
       // ── T5 · TRAINING BOTS (check FIRST — must never land in T1-T4) ──
-      // TollBit cannot monetize these. Logged at $0 CPM.
-      // Future: route to BotRev Training Deals product line.
       for (const token of TRAINING_BOT_TOKENS) {
         if (l.includes(token)) {
           return { tier: 5, cpm: TIERS.TIER5, label: "Training", isTraining: true };
@@ -633,12 +902,9 @@ async function handleRequest(request, env, ctx) {
       }
 
       // ── T1 · PREMIUM AI INFERENCE / RETRIEVAL ──
-      // NOTE: claudebot, claude-web, chatgpt-user are RETRIEVAL bots (inference),
-      // not training. anthropic-ai is training (caught in T5 above).
-      if (/claudebot|claude-web|chatgpt-user|oai-searchbot|applebot(?!-extended)|perplexitybot|perplexity-user|you\.com|phind|groq|amazonbot|timpibot|gemini-deep-research|google-notebooklm|googleagent-mariner|cloudflare-autorag/.test(l)) {
+      if (/claudebot|claude-web|chatgpt-user|oai-searchbot|applebot(?!-extended)|perplexitybot|perplexity-user|you\.com|phind|groq|amazonbot|timpibot|gemini-deep-research|google-notebooklm|googleagent-mariner|cloudflare-autorag|meta-externalagent/.test(l)) {
         return { tier: 1, cpm: TIERS.TIER1, label: "Premium AI", isTraining: false };
       }
-      // Legacy v26 broad T1 pattern (kept for backward compat, training tokens removed above)
       if (/openai|imagesift/.test(l)) {
         return { tier: 1, cpm: TIERS.TIER1, label: "Premium AI", isTraining: false };
       }
@@ -671,22 +937,16 @@ async function handleRequest(request, env, ctx) {
       const secFetch = request.headers.get("Sec-Fetch-Site") || "";
       const secMode  = request.headers.get("Sec-Fetch-Mode") || "";
 
-      // Only flag as stealth if the UA specifically looks like a full desktop browser
-      // (must have OS info + rendering engine, not just "mozilla")
       const looksLikeDesktopBrowser = /mozilla\/5\.0.*(windows|macintosh|linux).*(applewebkit|gecko)/i.test(ua);
-      if (!looksLikeDesktopBrowser) return false; // generic bots don't qualify as stealth
+      if (!looksLikeDesktopBrowser) return false;
 
-      // Real browsers send all of these. Score 4 signals — stealth requires ALL missing.
       const hasHumanAccept    = /text\/html/.test(accept);
       const hasHumanLang      = lang.length > 0;
       const hasHumanEnc       = /gzip/.test(enc);
-      const hasSecFetchHeader = secFetch.length > 0 || secMode.length > 0; // only real browsers send Sec-Fetch-*
+      const hasSecFetchHeader = secFetch.length > 0 || secMode.length > 0;
 
       const humanScore = [hasHumanAccept, hasHumanLang, hasHumanEnc, hasSecFetchHeader].filter(Boolean).length;
 
-      // Stealth = looks like a desktop browser but missing 3+ of 4 human signals
-      // (raised from <2 to <2 of 4 — dramatically reduces false positives on
-      //  CDN health checks, monitoring agents, and API clients)
       return humanScore < 2;
     }
 
@@ -713,7 +973,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 4. UTILITY HELPERS
+    // UTILITY HELPERS (from dashboard)
     // ============================================================
     async function getDomainName(aid) {
       const res = await env.DB.prepare("SELECT domain_name FROM publisher_entities WHERE audit_id = ? LIMIT 1").bind(aid).first();
@@ -734,7 +994,6 @@ async function handleRequest(request, env, ctx) {
         const endpoints = {
           "TollBit":   `https://api.tollbit.com/v1/publisher/analytics?days=${days}`,
           "Dappier":   `https://api.dappier.com/v1/publisher/stats?period=${days}d`,
-          "ProRata":   `https://api.prorata.ai/v1/publisher/revenue?days=${days}`,
           "Microsoft": "https://api.bing.com/v1/publisher/revenue",
           "Amazon":    "https://api.amazon.com/v1/publisher/ad-intel",
         };
@@ -759,7 +1018,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 5. SHARED BRAND CSS
+    // SHARED BRAND CSS
     // ============================================================
     const brandHead = `
 <meta charset="UTF-8">
@@ -882,7 +1141,7 @@ async function handleRequest(request, env, ctx) {
     // ============================================================
     const rawHostname = url.hostname;
     const hostname    = rawHostname.replace(/^www\./, '');
-    const isBotRevDomain = hostname === 'dash.botrev.com' || hostname === 'botrev.com';
+    const isBotRevDomain = hostname === 'dash.botrev.com';
 
     if (!isBotRevDomain) {
       let publisherAuditId = null;
@@ -922,14 +1181,11 @@ async function handleRequest(request, env, ctx) {
           const effectiveTier  = botClass ? botClass.tier : 4;
           const effectiveCPM   = botClass ? botClass.cpm  : TIERS.TIER4;
           const isStealthFlag  = (stealth && !botClass) ? 1 : 0;
-          // v27: track training bots — 1 for T5, 0 for all others
           const isTrainingFlag = (botClass?.isTraining) ? 1 : 0;
 
-          // D1 log (non-blocking) — v27 adds is_training, v27.2 adds entry_hash chain
           const dampedCPM = isTrainingFlag ? 0 : await getDampedCPM(publisherAuditId, effectiveCPM).catch(() => effectiveCPM);
           ctx.waitUntil((async () => {
             try {
-              // v27.2: Compute tamper-evident hash chain entry
               const prevEntry = await env.DB.prepare(
                 `SELECT entry_hash FROM bot_logs WHERE audit_id = ? ORDER BY id DESC LIMIT 1`
               ).bind(publisherAuditId).first().catch(() => null);
@@ -944,7 +1200,6 @@ async function handleRequest(request, env, ctx) {
           })());
 
           // TollBit log sink (non-blocking, batched)
-          // v27: T5 training bots are NOT sent to TollBit — they can't monetize them
           if (tollbitKey && !isTrainingFlag) {
             const responseStatus = (botClass?.tier === 1) ? 302 : (botClass?.tier === 2 ? 403 : 200);
             const tbLog = buildTollBitLog(request, responseStatus, effectiveTier, isStealthFlag);
@@ -952,22 +1207,16 @@ async function handleRequest(request, env, ctx) {
           }
 
           // Surge Intelligence (non-blocking)
-          // v27: evaluateSurge now excludes T5 from V10 count internally
           if (publisherAuditId && !isTrainingFlag) {
             ctx.waitUntil(evaluateSurge(publisherAuditId, hostname, reqPath, env, ctx));
           }
 
           // ── ROUTING DECISION ──────────────────────────────────────
-          // v27: T5 training bots pass through — TollBit cannot monetize them.
-          //      Future: when training_deals_active, route to Training Deals endpoint.
-          // T3 search bots: always pass through (publisher SEO critical).
-          // T1, T2, T4: redirect to active marketplace (TollBit or other).
           if (botClass && tollbitKey && publisherMarket) {
             if (botClass.tier === 3) {
               // T3 · Search — pass through, critical for SEO
             } else if (botClass.tier === 5) {
               // T5 · Training — pass through, TollBit gap
-              // TODO (v27.1): if publisher.training_deals_active → route to Training Deals
             } else {
               // T1, T2, T4 · Monetizable — redirect to marketplace
               const dest = `https://${publisherMarket}.${hostname}${reqPath}`;
@@ -1029,6 +1278,10 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
+    // DASHBOARD ROUTES — BotRev domain (dash.botrev.com)
+    // ============================================================
+
+    // ============================================================
     // 6. ADMIN FLEET COMMAND
     // ============================================================
     if (path.startsWith(SECRET_ADMIN_PATH)) {
@@ -1042,8 +1295,7 @@ async function handleRequest(request, env, ctx) {
         });
       }
 
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return new Response("Forbidden", { status: 403 });
+      if (!await isAdminAuthenticated(request, env)) return new Response("Forbidden", { status: 403 });
 
       const { results } = await env.DB.prepare(`
         SELECT pe.*,
@@ -1053,7 +1305,7 @@ async function handleRequest(request, env, ctx) {
         FROM publisher_entities pe
       `).all();
 
-      const markets  = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+      const markets  = ['TollBit', 'Dappier', 'Microsoft', 'Amazon'];
       const fullList = await Promise.all(results.map(async r => {
         const mktData = await Promise.all(markets.map(m => getMarketplaceDetails(r.audit_id, m)));
         return { ...r, total_mkt_gross: mktData.reduce((sum, mk) => sum + mk.gross, 0), mktStats: mktData };
@@ -1062,7 +1314,6 @@ async function handleRequest(request, env, ctx) {
       const fleetGross      = fullList.reduce((sum, r) => sum + r.total_mkt_gross, 0);
       const totalBots       = results.reduce((sum, r) => sum + (r.total_bot_hits    || 0), 0);
       const totalTraining   = results.reduce((sum, r) => sum + (r.training_hits     || 0), 0);
-      // v27: training gap estimated at floor CPM — what we'd recover if monetized
       const trainingGapEst  = totalTraining * (3.00 / 1000);
 
       const pendingSurgeRow = await env.DB.prepare(
@@ -1079,11 +1330,12 @@ async function handleRequest(request, env, ctx) {
     </div>
     <div class="top-bar-right">
       <button onclick="exportSelectedCSV()" class="btn btn-ghost btn-sm">↓ Export CSV</button>
-      <a href="${SURGE_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost btn-sm" style="color:#f59e0b; border-color:rgba(245,158,11,0.4); position:relative;">
+      <button onclick="generateFleetReport()" id="fleet-report-btn" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:rgba(16,185,129,0.4);">⚡ Fleet Report</button>
+      <a href="${SURGE_ADMIN_PATH}" class="btn btn-ghost btn-sm" style="color:#f59e0b; border-color:rgba(245,158,11,0.4); position:relative;">
         ⚡ Surge Intelligence
         ${pendingSurgeCount > 0 ? `<span style="position:absolute; top:-8px; right:-8px; background:#f59e0b; color:#0a1220; font-family:var(--font-mono); font-size:0.6rem; font-weight:700; padding:2px 6px; border-radius:10px; line-height:1.4;">${pendingSurgeCount}</span>` : ''}
       </a>
-      <a href="${ONBOARDING_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary btn-sm">+ Onboard Publisher</a>
+      <a href="${ONBOARDING_PATH}" class="btn btn-primary btn-sm">+ Onboard Publisher</a>
     </div>
   </div>
 </div>
@@ -1094,7 +1346,7 @@ async function handleRequest(request, env, ctx) {
     <div class="card card-lit sniffer-live">
       <div class="stat-label">Fleet Gross Revenue</div>
       <div class="stat-val" style="color:var(--green);">$${fleetGross.toFixed(2)}</div>
-      <div style="margin-top:8px; font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">30% management fee applied</div>
+      <div style="margin-top:8px; font-family:var(--font-mono); font-size:0.65rem; color:var(--muted);">30% management fee</div>
     </div>
     <div class="card">
       <div class="stat-label">Total Bot Hits</div>
@@ -1115,7 +1367,7 @@ async function handleRequest(request, env, ctx) {
   ${totalTraining > 0 ? `
   <div class="training-gap-callout" style="margin-bottom:24px;">
     <h4>⚡ Training Revenue Gap — ${totalTraining.toLocaleString()} unmonetized training bot hits across fleet</h4>
-    <p>These bots are collecting publisher content for LLM model training. TollBit cannot monetize them. BotRev Training Deals can recover this revenue through direct LLM licensing agreements with OpenAI, Anthropic, Google, Meta, and others.</p>
+    <p>These bots are collecting publisher content for LLM model training. These bots are not monetized through standard marketplace channels. BotRev Training Deals can recover this revenue through direct LLM licensing agreements with OpenAI, Anthropic, Google, Meta, and others.</p>
   </div>` : ''}
 
   <!-- Publisher Table -->
@@ -1167,11 +1419,12 @@ async function handleRequest(request, env, ctx) {
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button onclick="window.location.href='/dashboard?entity=${esc(r.pub_user_id)}&mode=admin'" class="btn btn-ghost btn-sm">Dash</button>
               <button onclick="openEditModal('${esc(r.audit_id)}')" class="btn btn-ghost btn-sm" style="color:var(--green); border-color:var(--green);">Edit</button>
+              <button onclick="generateAuditReport('${esc(r.audit_id)}','${esc(r.domain_name)}',this)" class="btn btn-ghost btn-sm" style="color:var(--navy-mid); border-color:var(--navy-mid);">Report</button>
               <button onclick="var p=document.getElementById('snip-panel-${esc(r.audit_id)}');p.style.display=p.style.display==='none'?'block':'none'" class="btn btn-ghost btn-sm" style="font-size:0.65rem;">&lt;/&gt;</button>
               <button onclick="deletePublisher('${esc(r.audit_id)}','${esc(r.domain_name)}')" class="btn btn-sm" style="background:rgba(239,68,68,0.12); color:#F87171; border:1px solid rgba(239,68,68,0.3);">Delete</button>
             </div>
             <div id="snip-panel-${esc(r.audit_id)}" style="display:none; margin-top:8px; position:relative; min-width:320px;">
-              <pre id="snip-code-${esc(r.audit_id)}" style="font-family:var(--font-mono); font-size:0.6rem; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:6px; padding:10px 50px 10px 12px; color:#a8c5e8; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin:0;">&lt;script&gt;(function(){var u="https://dash.botrev.com/api/sniff?audit_id=${encodeURIComponent(esc(r.audit_id))}";if(navigator.sendBeacon){navigator.sendBeacon(u)}else{fetch(u,{mode:"no-cors",keepalive:true})}})();&lt;/script&gt;</pre>
+              <pre id="snip-code-${esc(r.audit_id)}" style="font-family:var(--font-mono); font-size:0.6rem; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:6px; padding:10px 50px 10px 12px; color:#a8c5e8; white-space:pre-wrap; word-break:break-all; line-height:1.6; margin:0;">&lt;script&gt;(function(){var u="https://dash.botrev.com/api/sniff?audit_id=${encodeURIComponent(esc(r.audit_id))}&amp;path="+encodeURIComponent(window.location.pathname);if(navigator.sendBeacon){navigator.sendBeacon(u)}else{fetch(u,{mode:"no-cors",keepalive:true})}})();&lt;/script&gt;</pre>
               <button onclick="navigator.clipboard.writeText(document.getElementById('snip-code-${esc(r.audit_id)}').innerText).then(function(){var b=document.getElementById('snip-copy-${esc(r.audit_id)}');b.textContent='✓';b.style.color='var(--green)';setTimeout(function(){b.textContent='Copy';b.style.color='';},2000)})" id="snip-copy-${esc(r.audit_id)}" style="position:absolute; top:6px; right:6px; font-family:var(--font-mono); font-size:0.58rem; padding:3px 8px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--light-muted); cursor:pointer;">Copy</button>
             </div>
           </td>
@@ -1198,7 +1451,7 @@ async function handleRequest(request, env, ctx) {
     ['edit-network-id','edit-audit-id','edit-domain','edit-email','edit-password','edit-integration','edit-origin'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
     document.getElementById('edit-loading').style.display = 'block';
     document.getElementById('edit-form-body').style.display = 'none';
-    const res = await fetch("/api/admin/publisher-detail?audit_id="+encodeURIComponent(auditId)+"&pass="+encodeURIComponent("${ADMIN_PASSWORD}"));
+    const res = await fetch("/api/admin/publisher-detail?audit_id="+encodeURIComponent(auditId), {credentials:'same-origin'});
     const data = await res.json();
     document.getElementById('edit-loading').style.display = 'none';
     document.getElementById('edit-form-body').style.display = 'block';
@@ -1230,7 +1483,7 @@ async function handleRequest(request, env, ctx) {
       origin_server:     document.getElementById('edit-origin').value.trim() || null,
       marketplace:       document.getElementById('edit-marketplace').value.trim() || 'tollbit',
     };
-    const res  = await fetch("/api/admin/update-publisher?pass="+encodeURIComponent("${ADMIN_PASSWORD}"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const res  = await fetch("/api/admin/update-publisher", { method: "POST", credentials:'same-origin', headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json();
     const msg  = document.getElementById('edit-msg');
     if(data.ok){ msg.style.color='var(--green)'; msg.textContent='✓ Saved successfully. Reloading…'; msg.style.display='block'; setTimeout(()=>{ closeEditModal(); location.reload(); },1200); }
@@ -1244,7 +1497,7 @@ async function handleRequest(request, env, ctx) {
     const typed = document.getElementById('del-confirm-input').value.trim();
     if(typed !== 'DELETE'){ document.getElementById('del-error').style.display='block'; return; }
     const btn = document.getElementById('del-confirm-btn'); btn.textContent='Deleting…'; btn.disabled=true;
-    const res = await fetch("/api/admin/delete-publisher?audit_id="+encodeURIComponent(_pendingDelete.auditId)+"&pass="+encodeURIComponent("${ADMIN_PASSWORD}"),{method:"POST"});
+    const res = await fetch("/api/admin/delete-publisher?audit_id="+encodeURIComponent(_pendingDelete.auditId),{method:"POST",credentials:'same-origin'});
     const data = await res.json();
     if(data.ok){ closeDeleteModal(); location.reload(); }
     else { btn.textContent='Confirm Delete'; btn.disabled=false; document.getElementById('del-error').textContent='Error: '+(data.error||'Unknown error'); document.getElementById('del-error').style.display='block'; }
@@ -1256,7 +1509,7 @@ async function handleRequest(request, env, ctx) {
     const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb=>cb.getAttribute('data-aid'));
     if(!ids.length) return alert("Select at least one property.");
     const data = fullData.filter(r => ids.includes(r.audit_id));
-    let csv = "NetworkID,Domain,Sniffer,TrainingHits,TollBit,Dappier,ProRata,GrossRevenue,MgmtFee,NetPayout\\n";
+    let csv = "NetworkID,Domain,Sniffer,TrainingHits,TollBit,Dappier,GrossRevenue,MgmtFee,NetPayout\\n";
     data.forEach(r => {
       const fee = r.total_mkt_gross * 0.30;
       csv += [r.pub_user_id, r.domain_name, r.total_bot_hits > 0 ? 'ACTIVE' : 'OFFLINE',
@@ -1265,6 +1518,42 @@ async function handleRequest(request, env, ctx) {
     });
     const b=new Blob([csv],{type:"text/csv"}), u=URL.createObjectURL(b), a=document.createElement("a");
     a.href=u; a.download="BotRev_Fleet_"+new Date().toISOString().split('T')[0]+".csv"; a.click();
+  }
+
+  async function generateFleetReport(){
+    const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb=>cb.getAttribute('data-aid'));
+    if(!ids.length) return alert("Select at least one property.");
+    const btn = document.getElementById('fleet-report-btn'); btn.textContent='Generating…'; btn.disabled=true;
+    try {
+      const res = await fetch('/api/generate-fleet-report?ids='+encodeURIComponent(ids.join(',')), {credentials:'same-origin'});
+      if(res.ok){
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href=blobUrl; a.download='BotRev_Fleet_Report_'+new Date().toISOString().split('T')[0]+'.docx'; a.click();
+      } else {
+        const d = await res.json().catch(()=>({}));
+        alert('Error: '+(d.error||'Report generation failed'));
+      }
+    } catch(e){ alert('Network error: '+e.message); }
+    finally { btn.textContent='⚡ Fleet Report'; btn.disabled=false; }
+  }
+
+  async function generateAuditReport(auditId, domain, btn){
+    const orig = btn.textContent; btn.textContent='Generating…'; btn.disabled=true;
+    try {
+      const res = await fetch('/api/generate-report?audit_id='+encodeURIComponent(auditId)+'&range=all', {credentials:'same-origin'});
+      if(res.ok){
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href=blobUrl; a.download='BotRev_Audit_'+domain+'_'+new Date().toISOString().split('T')[0]+'.docx'; a.click();
+      } else {
+        const d = await res.json().catch(()=>({}));
+        alert('Error: '+(d.error||'Report generation failed'));
+      }
+    } catch(e){ alert('Network error: '+e.message); }
+    finally { btn.textContent=orig; btn.disabled=false; }
   }
 </script>
 
@@ -1296,7 +1585,7 @@ async function handleRequest(request, env, ctx) {
       </div>
       <div style="margin-bottom:24px;">
         <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Active Marketplace</label>
-        <select id="edit-marketplace" class="input" style="cursor:pointer;"><option value="tollbit">Partner A (TollBit)</option><option value="dappier">Partner B (Dappier)</option><option value="prorata">Partner C (ProRata)</option><option value="none">None (pass-through)</option></select>
+        <select id="edit-marketplace" class="input" style="cursor:pointer;"><option value="tollbit">Partner A (TollBit)</option><option value="dappier">Partner B (Dappier)</option><option value="none">None (pass-through)</option></select>
         <div style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); margin-top:6px;">Sets the active monetization partner. Change takes effect on next bot request — no deploy needed.</div>
       </div>
       <div id="edit-msg" style="display:none; font-family:var(--font-mono); font-size:0.75rem; margin-bottom:14px; padding:10px 14px; border-radius:6px; background:var(--bg);"></div>
@@ -1330,11 +1619,10 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 6b. SURGE INTELLIGENCE ADMIN — /admin-surge  (unchanged from v26)
+    // 6b. SURGE INTELLIGENCE ADMIN — /admin-surge
     // ============================================================
     if (path === SURGE_ADMIN_PATH) {
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return new Response("Forbidden", { status: 403 });
+      if (!await isAdminAuthenticated(request, env)) return new Response("Forbidden", { status: 403 });
 
       const { results: pubs } = await env.DB.prepare(`
         SELECT audit_id, domain_name, floor_cpm, beta,
@@ -1361,7 +1649,7 @@ async function handleRequest(request, env, ctx) {
       <div style="font-family:var(--font-mono); font-size:0.6rem; letter-spacing:3px; color:#f59e0b; margin-top:2px; text-transform:uppercase;">⚡ Surge Intelligence · Phase 2 — One-Click Approval</div>
     </div>
     <div class="top-bar-right">
-      <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost btn-sm">← Fleet Command</a>
+      <a href="${SECRET_ADMIN_PATH}" class="btn btn-ghost btn-sm">← Fleet Command</a>
     </div>
   </div>
 </div>
@@ -1481,7 +1769,7 @@ async function handleRequest(request, env, ctx) {
     const pfloor = parseFloat(document.getElementById('pfloor-'+auditId).value);
     const beta   = parseFloat(document.getElementById('beta-'+auditId).value);
     if (isNaN(pfloor) || isNaN(beta)) return alert('Invalid values');
-    const res = await fetch('/api/admin/save-formula?pass=${ADMIN_PASSWORD}', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ audit_id: auditId, floor_cpm: pfloor, beta }) });
+    const res = await fetch('/api/admin/save-formula', { method: 'POST', credentials:'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ audit_id: auditId, floor_cpm: pfloor, beta }) });
     const d = await res.json();
     if (d.ok) { const btn = event.target; btn.textContent='✓ Saved'; btn.style.color='var(--green)'; setTimeout(()=>{ btn.textContent='Save'; btn.style.color=''; },2000); } else { alert('Error: '+(d.error||'Unknown')); }
   }
@@ -1489,7 +1777,7 @@ async function handleRequest(request, env, ctx) {
   async function surgeAction(surgeId, auditId, action, btn) {
     btn.textContent = action==='approve'?'Approving…':'Dismissing…'; btn.disabled=true;
     try {
-      const res = await fetch('/api/admin/surge-action?pass=${ADMIN_PASSWORD}', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:surgeId,audit_id:auditId,action}) });
+      const res = await fetch('/api/admin/surge-action', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:surgeId,audit_id:auditId,action}) });
       const d = await res.json();
       if (d.ok) {
         const row = document.getElementById('surge-row-'+surgeId);
@@ -1530,42 +1818,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 7. BOT SNIFFER API — /api/sniff  (v27: is_training flag added)
-    // ============================================================
-    if (path === "/api/sniff") {
-      const ua      = request.headers.get("User-Agent") || "Unknown";
-      const auditId = url.searchParams.get("audit_id") || "unknown";
-      const ref     = request.headers.get("Referer") || "";
-
-      const botClass = classifyBot(ua);
-      const stealth  = isStealthCrawler(request);
-
-      const isCleanHuman = /mozilla|chrome|safari|firefox/i.test(ua)
-        && !stealth
-        && !botClass;
-
-      if (!isCleanHuman) {
-        const effectiveTier  = botClass ? botClass.tier : 4;
-        const effectiveCPM   = botClass ? botClass.cpm  : TIERS.TIER4;
-        const dampedCPM      = botClass?.isTraining ? 0 : await getDampedCPM(auditId, effectiveCPM);
-        const isStealthFlag  = (stealth && !botClass) ? 1 : 0;
-        const isTrainingFlag = botClass?.isTraining ? 1 : 0;
-
-        await env.DB.prepare(
-          "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, is_training, referer) VALUES (?, ?, ?, ?, 1, ?, ?, ?)"
-        ).bind(auditId, ua, effectiveTier, dampedCPM, isStealthFlag, isTrainingFlag, ref).run();
-      }
-
-      return new Response("OK", {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "no-store",
-        },
-      });
-    }
-
-    // ============================================================
-    // 8. DOMAIN DRILLDOWN  (v27: T5 tier added to badge map)
+    // 8. DOMAIN DRILLDOWN
     // ============================================================
     if (path === "/domain-drilldown") {
       const aid   = url.searchParams.get("audit_id");
@@ -1585,6 +1838,16 @@ async function handleRequest(request, env, ctx) {
         `SELECT COUNT(*) as cnt FROM bot_logs WHERE audit_id = ? AND is_training = 1 ${dF}`
       ).bind(aid).all();
 
+      // v27.4: Page-level analytics — top pages by bot hit count
+      const { results: topPages } = await env.DB.prepare(
+        `SELECT path, COUNT(*) as hits, SUM(cpm_value) as revenue
+         FROM bot_logs
+         WHERE audit_id = ? AND is_bot = 1 AND path IS NOT NULL AND path != '' ${dF}
+         GROUP BY path ORDER BY hits DESC LIMIT 25`
+      ).bind(aid).all();
+
+      const hasPageData = topPages.length > 0;
+
       let totalRec  = 0;
       let trainingCount = trainingRow[0]?.cnt || 0;
       bots.forEach(b => totalRec += (b.revenue || 0));
@@ -1597,12 +1860,12 @@ async function handleRequest(request, env, ctx) {
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
     <button onclick="history.back()" class="btn btn-ghost btn-sm">← Back</button>
     <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:2px;">Audit · ${dName}</div>
-    <div style="font-family:var(--font-mono); font-size:0.9rem; color:var(--green);">$${totalRec.toFixed(4)} est. recovered</div>
+    <div style="font-family:var(--font-mono); font-size:0.9rem; color:var(--green);">$${totalRec.toFixed(4)}</div>
   </div>
 
   <div class="grid-4" style="margin-bottom:24px;">
     <div class="card"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${bots.reduce((a,b)=>a+b.c,0).toLocaleString()}</div></div>
-    <div class="card"><div class="stat-label">Net Revenue (Publisher Share)</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div><div style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted); margin-top:6px;">After 30% BotRev management fee</div></div>
+    <div class="card"><div class="stat-label">Est. Net Revenue</div><div class="stat-val" style="color:var(--green);">$${totalRec.toFixed(4)}</div></div>
     <div class="card"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${stealth[0]?.cnt || 0}</div></div>
     <div class="card" style="border-top:3px solid #f59e0b;"><div class="stat-label" style="color:#b45309;">T5 Training Hits</div><div class="stat-val" style="color:#d97706;">${trainingCount.toLocaleString()}</div></div>
   </div>
@@ -1613,38 +1876,103 @@ async function handleRequest(request, env, ctx) {
     <p>These bots are collecting your content for LLM model training. TollBit doesn't monetize them. Ask your BotRev account manager about BotRev Training Deals — direct LLM licensing agreements that can recover this revenue.</p>
   </div>` : ''}
 
-  <div class="card">
-    <table>
-      <thead><tr><th>Bot Agent</th><th>Tier</th><th>Hits</th><th style="text-align:right;">Net Revenue</th></tr></thead>
-      <tbody>
-      ${bots.map(b => {
+  <div style="display:grid; grid-template-columns:3fr 2fr; gap:20px; align-items:start;">
+
+  <!-- BOT TABLE with top 5 + expand -->
+  <div class="card" style="min-width:0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted);">Bot / Company</div>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <span style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted);">${bots.length} bots detected</span>
+        ${bots.length > 5 ? '<button onclick="toggleBots()" id="bot-expand-btn" style="font-family:var(--font-mono); font-size:0.6rem; padding:3px 10px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--green); cursor:pointer;">Show all ↓</button>' : ''}
+      </div>
+    </div>
+    <table id="bot-table">
+      <thead><tr>
+        <th onclick="sortTable('name')" style="cursor:pointer; user-select:none;">Bot / Company <span id="sort-name" style="font-size:0.7rem; color:var(--muted);"></span></th>
+        <th onclick="sortTable('tier')" style="cursor:pointer; user-select:none;">Tier <span id="sort-tier" style="font-size:0.7rem; color:var(--muted);"></span></th>
+        <th onclick="sortTable('hits')" style="cursor:pointer; user-select:none;">Hits <span id="sort-hits" style="font-size:0.7rem; color:var(--muted);">↓</span></th>
+        <th onclick="sortTable('revenue')" style="cursor:pointer; user-select:none; text-align:right;">Revenue <span id="sort-revenue" style="font-size:0.7rem; color:var(--muted);"></span></th>
+      </tr></thead>
+      <tbody id="bot-tbody">
+      ${bots.map((b, idx) => {
         const reclassified = classifyBot(b.bot_name || "");
-        // If reclassified is null the UA looks human — likely a false positive from v26's
-        // broader T1 pattern. Fall back to T4 (utility) rather than inheriting a stale
-        // DB tier, which prevents human-looking UAs from showing as T1 Premium AI.
         const t = reclassified ? reclassified.tier : 4;
-        return `<tr>
-          <td><code>${(b.bot_name || "").substring(0, 80)}</code>${b.is_training ? ' <span class="badge badge-t5">training</span>' : ''}</td>
-          <td><span class="badge ${tierBadge[t] || 'badge-t4'}">T${t}</span></td>
-          <td style="font-family:var(--font-mono);">${b.c.toLocaleString()}</td>
-          <td style="text-align:right; font-family:var(--font-mono); color:${tierColors[t] || 'var(--muted)'};">${t === 5 ? '<span style="color:#d97706;">$0.0000 ⚡</span>' : '$'+(b.revenue||0).toFixed(6)}</td>
-        </tr>`;
+        const display = getBotDisplayName(b.bot_name || "");
+        const rev = b.revenue || 0;
+        return '<tr data-name="' + esc(display.name) + '" data-tier="' + t + '" data-hits="' + b.c + '" data-revenue="' + rev + '" class="bot-row' + (idx >= 5 ? ' bot-extra" style="display:none;' : '') + '">' +
+          '<td><div style="display:flex; align-items:center; gap:8px;"><span style="font-size:1rem;">' + display.icon + '</span><div>' +
+          '<div style="font-weight:700; font-size:0.85rem; color:var(--text);">' + esc(display.name) + '</div>' +
+          '<div style="font-size:0.7rem; color:var(--muted); font-family:var(--font-mono);">' + esc(display.company) + '</div>' +
+          '</div></div>' + (b.is_training ? '<span class="badge badge-t5" style="margin-top:4px; display:inline-block;">training</span>' : '') + '</td>' +
+          '<td><span class="badge ' + (tierBadge[t] || 'badge-t4') + '">T' + t + '</span></td>' +
+          '<td style="font-family:var(--font-mono);">' + b.c.toLocaleString() + '</td>' +
+          '<td style="text-align:right; font-family:var(--font-mono); color:' + (tierColors[t] || 'var(--muted)') + ';">' + (t === 5 ? '<span style="color:#d97706;">$0.0000 ⚡</span>' : '$' + rev.toFixed(6)) + '</td>' +
+          '</tr>';
       }).join('')}
       </tbody>
     </table>
   </div>
+  <script>
+    let _sortCol = 'hits', _sortDir = -1;
+    let _botsExpanded = false;
+    function toggleBots() {
+      _botsExpanded = !_botsExpanded;
+      document.querySelectorAll('.bot-extra').forEach(r => r.style.display = _botsExpanded ? '' : 'none');
+      const btn = document.getElementById('bot-expand-btn');
+      if (btn) btn.textContent = _botsExpanded ? 'Show less ↑' : 'Show all ↓';
+    }
+    function sortTable(col) {
+      if (_sortCol === col) { _sortDir *= -1; } else { _sortCol = col; _sortDir = col === 'name' ? 1 : -1; }
+      ['name','tier','hits','revenue'].forEach(c => {
+        document.getElementById('sort-' + c).textContent = c === _sortCol ? (_sortDir === 1 ? '↑' : '↓') : '';
+      });
+      const tbody = document.getElementById('bot-tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        let av = a.dataset[col], bv = b.dataset[col];
+        if (col === 'name') return _sortDir * av.localeCompare(bv);
+        return _sortDir * (parseFloat(bv) - parseFloat(av));
+      });
+      rows.forEach(r => tbody.appendChild(r));
+      // Re-apply visibility after sort
+      if (!_botsExpanded) {
+        let visible = 0;
+        tbody.querySelectorAll('tr').forEach(r => {
+          r.style.display = visible < 5 ? '' : 'none';
+          if (r.style.display !== 'none') visible++;
+          r.classList.toggle('bot-extra', visible > 5);
+        });
+      }
+    }
+  </script>
+  </div>
+
+  <!-- PAGE ANALYTICS with top 5 + expand -->
+  <div class="card" style="min-width:0;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted);">Top Pages by Bot Traffic</div>
+      ${hasPageData && topPages.length > 5 ? '<button onclick="togglePages()" id="page-expand-btn" style="font-family:var(--font-mono); font-size:0.6rem; padding:3px 10px; border-radius:4px; border:1px solid var(--border); background:rgba(255,255,255,0.05); color:var(--green); cursor:pointer;">Show all ↓</button>' : ''}
+    </div>
+    ${hasPageData ? '<table><thead><tr><th>Page Path</th><th style="text-align:right;">Hits</th></tr></thead><tbody>' +
+      topPages.map((p, idx) => '<tr class="page-row' + (idx >= 5 ? ' page-extra" style="display:none;' : '') + '"><td><code style="font-size:0.68rem; word-break:break-all;">' + esc(p.path) + '</code></td><td style="text-align:right; font-family:var(--font-mono); white-space:nowrap;">' + p.hits.toLocaleString() + '</td></tr>').join('') +
+      '</tbody></table><script>function togglePages(){var e=!window._pEx;window._pEx=e;document.querySelectorAll(".page-extra").forEach(function(r){r.style.display=e?"":"none"});var b=document.getElementById("page-expand-btn");if(b)b.textContent=e?"Show less ↑":"Show all ↓";}<\/script>' :
+      '<div style="padding:24px 0; text-align:center;"><div style="font-size:1.8rem; margin-bottom:10px;">📄</div><div style="font-weight:700; font-size:0.85rem; color:var(--text); margin-bottom:8px;">No Page Data Yet</div><div style="font-size:0.78rem; color:var(--muted); line-height:1.7;"><strong style="color:var(--green);">CNAME publishers</strong> — paths log automatically.<br><br><strong style="color:var(--amber);">Snippet publishers</strong> — update your snippet to enable page-level tracking.</div></div>'}
+  </div>
+  </div>
+
 </div></body></html>`, { headers: { "Content-Type": "text/html" } });
     }
 
     // ============================================================
-    // 9. MARKETPLACE DRILLDOWN  (unchanged from v26)
+    // 9. MARKETPLACE DRILLDOWN
     // ============================================================
     if (path === "/market-drilldown") {
       const aid   = url.searchParams.get("audit_id");
       const m     = url.searchParams.get("market");
       const r     = url.searchParams.get("range") || "all";
       const det   = await getMarketplaceDetails(aid, m, r);
-      const mColor = { TollBit: "var(--green)", Dappier: "var(--blue)", ProRata: "var(--amber)", Microsoft: "#00a4ef", Amazon: "#ff9900" }[m] || "var(--green)";
+      const mColor = { TollBit: "var(--green)", Dappier: "var(--blue)", Microsoft: "#00a4ef", Amazon: "#ff9900" }[m] || "var(--green)";
 
       return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
 <div class="wrap" style="padding-top:32px; padding-bottom:80px;">
@@ -1667,11 +1995,10 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 10. ONBOARDING PAGE  (unchanged from v26)
+    // 10. ONBOARDING PAGE
     // ============================================================
     if (path === ONBOARDING_PATH) {
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return new Response("Unauthorized", { status: 401 });
+      if (!await isAdminAuthenticated(request, env)) return new Response("Unauthorized", { status: 401 });
 
       // ── SINGLE PUBLISHER QUICK-ADD ──
       if (request.method === "POST" && url.searchParams.get("mode") === "single") {
@@ -1697,7 +2024,7 @@ async function handleRequest(request, env, ctx) {
             "INSERT OR IGNORE INTO publisher_marketplaces (audit_id, marketplace_name, api_key) VALUES (?, ?, ?)"
           ).bind(auditId, marketplace, "").run();
 
-          return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + ADMIN_PASSWORD, 302);
+          return Response.redirect(url.origin + SECRET_ADMIN_PATH, 302);
         } catch (e) {
           return new Response("Error: " + e.message, { status: 500 });
         }
@@ -1721,8 +2048,6 @@ async function handleRequest(request, env, ctx) {
             const originSvr = origin  || null;
 
             // v27.2: Origin server validation for Type A integrations
-            // Verify the publisher's origin is reachable before writing to D1.
-            // Type B (snippet) publishers don't have an origin server requirement.
             if (integType === "A" && originSvr) {
               try {
                 const originCheck = await fetch(`https://${originSvr}/`, {
@@ -1731,14 +2056,10 @@ async function handleRequest(request, env, ctx) {
                   signal: AbortSignal.timeout(5000),
                   redirect: 'follow',
                 });
-                // Any HTTP response (including 4xx) means the server is reachable.
-                // Only network-level failures (timeout, DNS error) block onboarding.
                 if (!originCheck.ok && originCheck.status === 0) {
                   warnings.push(`⚠ ${dom}: Origin server ${originSvr} unreachable — imported anyway, verify before going live.`);
                 }
               } catch (originErr) {
-                // Origin check failed — log warning but don't block import.
-                // Publisher may be onboarding before DNS is pointed.
                 warnings.push(`⚠ ${dom}: Could not verify origin server ${originSvr} (${originErr.message}) — imported, verify before activating.`);
               }
             }
@@ -1760,12 +2081,12 @@ async function handleRequest(request, env, ctx) {
       ${warnings.map(w => `<div style="font-size:0.78rem; color:#b45309; margin-bottom:6px; line-height:1.5;">${w}</div>`).join('')}
       <div style="font-size:0.75rem; color:#b45309; margin-top:10px; font-style:italic;">Publishers were imported but should be verified in Fleet Command before DNS is activated.</div>
     </div>
-    <a href="${url.origin + SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary" style="width:100%; justify-content:center;">→ Go to Fleet Command</a>
+    <a href="${url.origin + SECRET_ADMIN_PATH}" class="btn btn-primary" style="width:100%; justify-content:center;">→ Go to Fleet Command</a>
   </div>
 </div></body></html>`, { headers: { "Content-Type": "text/html" } });
           }
 
-          return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + ADMIN_PASSWORD, 302);
+          return Response.redirect(url.origin + SECRET_ADMIN_PATH, 302);
         } catch (e) {
           return new Response("Error: " + e.message, { status: 500 });
         }
@@ -1780,7 +2101,7 @@ async function handleRequest(request, env, ctx) {
     <!-- QUICK ADD SINGLE PUBLISHER -->
     <div class="card" style="margin-bottom:24px; border-top:3px solid var(--green);">
       <div style="font-family:var(--font-mono); font-size:0.65rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:16px;">⚡ Quick Add — Single Publisher</div>
-      <form method="POST" action="${ONBOARDING_PATH}?pass=${ADMIN_PASSWORD}&mode=single">
+      <form method="POST" action="${ONBOARDING_PATH}?mode=single">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
           <div>
             <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Network ID *</label>
@@ -1833,13 +2154,13 @@ async function handleRequest(request, env, ctx) {
       </form>
     </div>
 
-    <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-ghost" style="width:100%; margin-top:16px; justify-content:center;">← Back to Fleet Command</a>
+    <a href="${SECRET_ADMIN_PATH}" class="btn btn-ghost" style="width:100%; margin-top:16px; justify-content:center;">← Back to Fleet Command</a>
   </div>
 </div></body></html>`, { headers: { "Content-Type": "text/html" } });
     }
 
     // ============================================================
-    // 11. MAIN PUBLISHER DASHBOARD  (v27: T5 tier + training gap callout)
+    // 11. MAIN PUBLISHER DASHBOARD
     // ============================================================
     if (path === "/dashboard") {
       const eId    = (url.searchParams.get("entity") || "").toLowerCase();
@@ -1851,6 +2172,9 @@ async function handleRequest(request, env, ctx) {
         "SELECT * FROM publisher_entities WHERE LOWER(pub_user_id) = ?"
       ).bind(eId).all();
       if (domains.length === 0) return new Response("Access Denied", { status: 403 });
+
+      // True if any domain is on JS Snippet (B) — used to conditionally show CNAME upgrade CTA
+      const hasSnippetDomain = domains.some(d => d.integration_type === 'B');
 
       const dateFilter = range === "7" ? "AND timestamp > datetime('now','-7 days')" : range === "30" ? "AND timestamp > datetime('now','-30 days')" : "";
       const filterBar  = `
@@ -1880,8 +2204,14 @@ async function handleRequest(request, env, ctx) {
 
         const totalHits    = stats?.tB || 0;
         const trainingHits = stats?.tTraining || 0;
+
+        // Revenue projection: extrapolate current period to 30-day estimate
+        const obsRevenue   = stats?.tRev || 0;
+        const daysOfData   = range === '7' ? 7 : range === '30' ? 30 : null;
+        const dailyRate    = daysOfData && obsRevenue > 0 ? obsRevenue / daysOfData : null;
+        const projMonthly  = dailyRate ? dailyRate * 30 : null;
+        const projAnnual   = dailyRate ? dailyRate * 365 : null;
         const tierData     = Object.fromEntries((tierBreak.results || []).map(r => [r.tier, r]));
-        // v27: 5 tiers including T5 training
         const tierLabels   = { 1: "Premium AI", 2: "Headless", 3: "Search", 4: "Utility", 5: "Training ⚡" };
         const tierColors   = { 1: 'var(--green)', 2: 'var(--blue)', 3: 'var(--amber)', 4: 'var(--muted)', 5: '#d97706' };
 
@@ -1908,11 +2238,46 @@ async function handleRequest(request, env, ctx) {
 
         tabContent = `
           ${filterBar}
-          <div class="grid-3" style="margin-bottom:24px;">
+          <div class="grid-3" style="margin-bottom:16px;">
             <div class="card card-lit"><div class="stat-label">Total Bot Hits</div><div class="stat-val">${totalHits.toLocaleString()}</div></div>
-            <div class="card card-lit"><div class="stat-label">Net Revenue (Publisher Share)</div><div class="stat-val" style="color:var(--green);">$${(stats?.tRev||0).toFixed(4)}</div><div style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted); margin-top:6px;">After 30% BotRev management fee</div></div>
+            <div class="card card-lit"><div class="stat-label">Est. Net Revenue</div><div class="stat-val" style="color:var(--green);">$${(stats?.tRev||0).toFixed(4)}</div></div>
             <div class="card card-lit"><div class="stat-label">Stealth Crawlers</div><div class="stat-val" style="color:var(--amber);">${(stats?.tS||0).toLocaleString()}</div></div>
           </div>
+
+          ${projMonthly ? `
+          <div class="card" style="margin-bottom:24px; border-top:3px solid var(--green); background:linear-gradient(135deg, rgba(16,185,129,0.04) 0%, transparent 60%);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+              <div>
+                <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:4px;">Revenue Projection</div>
+                <div style="font-size:0.82rem; color:var(--muted); line-height:1.5;">Based on your last ${range === '7' ? '7 days' : '30 days'} of AI bot traffic at current rates</div>
+              </div>
+              <span style="font-family:var(--font-mono); font-size:0.6rem; color:var(--muted); padding:3px 8px; border:1px solid var(--border); border-radius:4px;">ESTIMATE</span>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+              <div style="text-align:center; padding:16px; background:var(--surface-2); border-radius:10px;">
+                <div style="font-family:var(--font-mono); font-size:0.55rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Daily Rate</div>
+                <div style="font-family:var(--font-mono); font-size:1.4rem; font-weight:500; color:var(--text);">$${dailyRate.toFixed(4)}</div>
+                <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">per day</div>
+              </div>
+              <div style="text-align:center; padding:16px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:10px;">
+                <div style="font-family:var(--font-mono); font-size:0.55rem; letter-spacing:1px; text-transform:uppercase; color:var(--green); margin-bottom:8px;">Est. Monthly</div>
+                <div style="font-family:var(--font-mono); font-size:1.4rem; font-weight:500; color:var(--green);">$${projMonthly.toFixed(2)}</div>
+                <div style="font-size:0.7rem; color:var(--green); margin-top:4px;">publisher net / month</div>
+              </div>
+              <div style="text-align:center; padding:16px; background:var(--surface-2); border-radius:10px;">
+                <div style="font-family:var(--font-mono); font-size:0.55rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Est. Annual</div>
+                <div style="font-family:var(--font-mono); font-size:1.4rem; font-weight:500; color:var(--text);">$${projAnnual.toFixed(2)}</div>
+                <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">at current traffic</div>
+              </div>
+            </div>
+            <div style="margin-top:12px; font-size:0.72rem; color:var(--muted); font-style:italic;">
+              ${hasSnippetDomain ? 'Upgrade to CNAME integration to capture an estimated 40–60% more bot traffic — raw HTTP crawlers, including most AI training and inference bots, do not execute JavaScript and are invisible to the snippet.' : 'Projection assumes consistent traffic patterns.'}
+            </div>
+          </div>` : `
+          <div class="card" style="margin-bottom:24px; border-top:3px solid var(--green);">
+            <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin-bottom:8px;">Revenue Projection</div>
+            <p style="font-size:0.82rem; color:var(--muted);">Select a 7-day or 30-day window to see your projected monthly and annual earnings based on current traffic patterns.</p>
+          </div>`}
 
           <div class="card" style="margin-bottom:24px;">
             <div class="stat-label" style="margin-bottom:16px;">Tier Breakdown</div>
@@ -1936,19 +2301,19 @@ async function handleRequest(request, env, ctx) {
           ${trainingHits > 0 ? `
           <div class="training-gap-callout">
             <h4>⚡ ${trainingHits.toLocaleString()} Training Bot Hits — Unmonetized (TollBit Gap)</h4>
-            <p>These bots are collecting your content for LLM model training. TollBit doesn't monetize them — but BotRev Training Deals can recover this revenue through direct licensing agreements with AI companies. Contact your BotRev account manager to learn more.</p>
+            <p>These bots are collecting your content for LLM model training. These hits are not monetized through standard marketplace channels — but BotRev Training Deals can recover this revenue through direct licensing agreements with AI companies. Contact your BotRev account manager to learn more.</p>
           </div>` : ''}
 
           ${domainCards.join('')}`;
 
       } else if (tab === "market") {
-        const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+        const markets = ['TollBit', 'Dappier', 'Microsoft', 'Amazon'];
         const allMarketData = await Promise.all(domains.map(d =>
           Promise.all(markets.map(m => getMarketplaceDetails(d.audit_id, m, range)))
         ));
         let gNet = 0;
         allMarketData.forEach(dm => dm.forEach(m => { gNet += m.net; }));
-        const mktColors = { TollBit: "var(--green)", Dappier: "var(--blue)", ProRata: "var(--amber)", Microsoft: "#00a4ef", Amazon: "#ff9900" };
+        const mktColors = { TollBit: "var(--green)", Dappier: "var(--blue)", Microsoft: "#00a4ef", Amazon: "#ff9900" };
 
         tabContent = `
           ${filterBar}
@@ -2001,21 +2366,95 @@ async function handleRequest(request, env, ctx) {
                 </div>
               </div>
             </div>
+            </div>
+
             <div class="card" style="margin-bottom:16px;">
-              <div class="stat-label" style="margin-bottom:16px;">CPM Recovery Matrix</div>
-              <table>
-                <thead><tr><th>Tier</th><th>Bot Class</th><th>Example Agents</th><th style="text-align:right;">CPM</th></tr></thead>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div class="stat-label">AI Crawler Intelligence Directory</div>
+                <div style="font-family:var(--font-mono); font-size:0.58rem; color:var(--muted);">Updated from live fleet data</div>
+              </div>
+              <p style="font-size:0.78rem; color:var(--muted); margin-bottom:16px; line-height:1.6;">Every known AI crawler BotRev monitors across the publisher fleet — who they are, what they do, which tier they belong to, and how BotRev monetizes them.</p>
+
+              <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--green); margin:16px 0 8px; padding-bottom:6px; border-bottom:2px solid rgba(16,185,129,0.15);">T1 · Premium AI Inference</div>
+              <table style="margin-bottom:20px; font-size:0.78rem;">
+                <thead><tr><th>Bot</th><th>Company</th><th>Purpose</th><th style="text-align:right;">Monetized</th></tr></thead>
                 <tbody>
-                  <tr><td><span class="badge badge-t1">T1</span></td><td style="font-weight:700;">Premium AI</td><td style="font-size:0.75rem; color:var(--muted);">ClaudeBot, ChatGPT-User, PerplexityBot</td><td style="text-align:right; font-family:var(--font-mono); color:var(--green);">$20.00</td></tr>
-                  <tr><td><span class="badge badge-t2">T2</span></td><td style="font-weight:700;">Headless</td><td style="font-size:0.75rem; color:var(--muted);">Puppeteer, Playwright, Selenium, HeadlessChrome</td><td style="text-align:right; font-family:var(--font-mono); color:var(--blue);">$10.00</td></tr>
-                  <tr><td><span class="badge badge-t3">T3</span></td><td style="font-weight:700;">Search</td><td style="font-size:0.75rem; color:var(--muted);">Googlebot, Bingbot, DuckDuckBot, Baidu</td><td style="text-align:right; font-family:var(--font-mono); color:var(--amber);">$0.00</td></tr>
-                  <tr><td><span class="badge badge-t4">T4</span></td><td style="font-weight:700;">Utility</td><td style="font-size:0.75rem; color:var(--muted);">General crawlers, unidentified agents</td><td style="text-align:right; font-family:var(--font-mono); color:var(--muted);">$1.00</td></tr>
-                  <tr><td><span class="badge badge-t5">T5</span></td><td style="font-weight:700;">Training ⚡</td><td style="font-size:0.75rem; color:var(--muted);">GPTBot, anthropic-ai, CCBot, Bytespider, Google-Extended</td><td style="text-align:right; font-family:var(--font-mono); color:#d97706;">$0.00 (TollBit gap)</td></tr>
+                  <tr><td><code>ChatGPT-User</code></td><td>OpenAI</td><td style="color:var(--muted);">Real-time inference — fetches pages to answer live ChatGPT user queries</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>ClaudeBot</code></td><td>Anthropic</td><td style="color:var(--muted);">Real-time inference — fetches pages to answer live Claude user queries</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>PerplexityBot</code></td><td>Perplexity AI</td><td style="color:var(--muted);">Real-time AI search — retrieves content to generate Perplexity answers</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>OAI-SearchBot</code></td><td>OpenAI</td><td style="color:var(--muted);">SearchGPT crawler — indexes content for OpenAI's AI search product</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>amazon-kendra / amazon-Quick</code></td><td>Amazon</td><td style="color:var(--muted);">Amazon Kendra enterprise AI search — indexes publisher content for enterprise AI</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Amazonbot</code></td><td>Amazon</td><td style="color:var(--muted);">Alexa and Amazon AI product crawler — fetches content for Amazon's AI responses</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>meta-externalagent</code></td><td>Meta</td><td style="color:var(--muted);">Meta AI inference agent — fetches content for Meta AI assistant responses</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>YouBot</code></td><td>You.com</td><td style="color:var(--muted);">AI search engine — fetches pages to power You.com AI-generated answers</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>cohere-ai</code></td><td>Cohere</td><td style="color:var(--muted);">Enterprise AI inference — retrieves content for Cohere's business AI products</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
                 </tbody>
               </table>
-              <div style="margin-top:12px; padding:12px 16px; background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; font-size:0.78rem; color:#b45309; line-height:1.6;">
-                <strong>⚡ T5 · Training:</strong> TollBit cannot monetize training bots. BotRev logs these hits and can connect publishers with direct LLM licensing agreements through the BotRev Training Deals program. Ask your account manager.
-              </div>
+
+              <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--blue); margin:16px 0 8px; padding-bottom:6px; border-bottom:2px solid rgba(45,90,142,0.15);">T2 · Headless Scrapers</div>
+              <table style="margin-bottom:20px; font-size:0.78rem;">
+                <thead><tr><th>Bot</th><th>Company</th><th>Purpose</th><th style="text-align:right;">Monetized</th></tr></thead>
+                <tbody>
+                  <tr><td><code>HeadlessChrome</code></td><td>Automation</td><td style="color:var(--muted);">Chrome running without a display — used for scraping, testing, and AI data pipelines</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Puppeteer</code></td><td>Google / Automation</td><td style="color:var(--muted);">Node.js browser automation — commonly used in AI data collection pipelines</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Playwright</code></td><td>Microsoft / Automation</td><td style="color:var(--muted);">Cross-browser automation — used for large-scale web scraping and AI training data</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Selenium</code></td><td>Automation</td><td style="color:var(--muted);">Browser automation framework — oldest and most common headless scraper</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>PhantomJS</code></td><td>Automation</td><td style="color:var(--muted);">Headless WebKit browser — legacy automation tool still used in scraping pipelines</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>quillbot.com</code></td><td>QuillBot</td><td style="color:var(--muted);">AI writing assistant crawler — collects content to improve paraphrasing models</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                </tbody>
+              </table>
+
+              <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--amber); margin:16px 0 8px; padding-bottom:6px; border-bottom:2px solid rgba(245,158,11,0.15);">T3 · Search Crawlers · Pass-Through (SEO Protected)</div>
+              <table style="margin-bottom:20px; font-size:0.78rem;">
+                <thead><tr><th>Bot</th><th>Company</th><th>Purpose</th><th style="text-align:right;">Status</th></tr></thead>
+                <tbody>
+                  <tr><td><code>Googlebot</code></td><td>Google</td><td style="color:var(--muted);">Primary Google search crawler — indexes content for Google Search</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>bingbot</code></td><td>Microsoft</td><td style="color:var(--muted);">Bing search crawler — indexes content for Bing and Microsoft Copilot search</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>Yahoo! Slurp</code></td><td>Yahoo</td><td style="color:var(--muted);">Yahoo search crawler — powers Yahoo Search indexing</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>DuckAssistBot</code></td><td>DuckDuckGo</td><td style="color:var(--muted);">DuckDuckGo AI Answer crawler — retrieves content for DuckDuckGo AI features</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>DuckDuckBot</code></td><td>DuckDuckGo</td><td style="color:var(--muted);">Standard DuckDuckGo search crawler</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>Baiduspider</code></td><td>Baidu</td><td style="color:var(--muted);">Chinese search engine crawler</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>YandexBot</code></td><td>Yandex</td><td style="color:var(--muted);">Russian search engine crawler</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>Applebot</code></td><td>Apple</td><td style="color:var(--muted);">Apple crawler — powers Spotlight, Siri Suggestions, and Safari search</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                  <tr><td><code>PetalBot</code></td><td>Huawei</td><td style="color:var(--muted);">Huawei Petal Search crawler</td><td style="text-align:right;"><span class="badge badge-warn">Pass-Through</span></td></tr>
+                </tbody>
+              </table>
+
+              <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:16px 0 8px; padding-bottom:6px; border-bottom:2px solid rgba(90,127,168,0.15);">T4 · Utility Crawlers</div>
+              <table style="margin-bottom:20px; font-size:0.78rem;">
+                <thead><tr><th>Bot</th><th>Company</th><th>Purpose</th><th style="text-align:right;">Monetized</th></tr></thead>
+                <tbody>
+                  <tr><td><code>SiteAuditBot</code></td><td>Semrush</td><td style="color:var(--muted);">SEO audit crawler — analyzes site structure and content for SEO reports</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>AhrefsBot</code></td><td>Ahrefs</td><td style="color:var(--muted);">SEO backlink and keyword research crawler</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>MJ12bot</code></td><td>Majestic</td><td style="color:var(--muted);">Link intelligence crawler — builds Majestic's web link index</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>LinkedInBot</code></td><td>LinkedIn</td><td style="color:var(--muted);">LinkedIn link preview and content crawler</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>meta-externalads</code></td><td>Meta</td><td style="color:var(--muted);">Meta advertising crawler — fetches content for Facebook and Instagram ad targeting</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>FBAN/FB4A</code></td><td>Meta</td><td style="color:var(--muted);">Facebook in-app browser — users clicking links inside the Facebook mobile app</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Instagram</code></td><td>Meta</td><td style="color:var(--muted);">Instagram in-app browser — users clicking links inside the Instagram app</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Barcelona</code></td><td>Meta</td><td style="color:var(--muted);">Threads in-app browser — users clicking links inside the Threads app</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>ContextualBot</code></td><td>Outcomes.net</td><td style="color:var(--muted);">Contextual advertising crawler — analyzes content for ad targeting signals</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Ground News</code></td><td>Ground News</td><td style="color:var(--muted);">News aggregator app — fetches publisher articles for the Ground News platform</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                  <tr><td><code>Paqlebot</code></td><td>Paqle</td><td style="color:var(--muted);">Danish search engine crawler</td><td style="text-align:right;"><span class="badge badge-active">✓</span></td></tr>
+                </tbody>
+              </table>
+
+              <div style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:2px; text-transform:uppercase; color:#d97706; margin:16px 0 8px; padding-bottom:6px; border-bottom:2px solid rgba(217,119,6,0.15);">T5 · Training Crawlers · ⚡ Training Deals Opportunity</div>
+              <p style="font-size:0.75rem; color:var(--muted); margin-bottom:8px; line-height:1.6;">These bots collect your content for LLM model training. No current AI content marketplace — TollBit, Microsoft PCM, Amazon, or Dappier — monetizes training crawlers through standard per-access pricing. Training data licensing happens exclusively through direct deals between publishers and AI companies. BotRev logs every T5 hit, building the verified audit record you need to negotiate those deals.</p>
+              <table style="font-size:0.78rem;">
+                <thead><tr><th>Bot</th><th>Company</th><th>Purpose</th><th style="text-align:right;">Path to Revenue</th></tr></thead>
+                <tbody>
+                  <tr><td><code>GPTBot</code></td><td>OpenAI</td><td style="color:var(--muted);">OpenAI's primary training data crawler — collects content to train GPT models</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>anthropic-ai</code></td><td>Anthropic</td><td style="color:var(--muted);">Anthropic training crawler — 43,214 requests per referral sent back to publishers</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>Google-Extended</code></td><td>Google</td><td style="color:var(--muted);">Google AI training crawler — collects content for Gemini model training</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>CCBot</code></td><td>Common Crawl</td><td style="color:var(--muted);">Largest open LLM training dataset — used by OpenAI, Meta, and most major AI labs</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>Bytespider</code></td><td>ByteDance</td><td style="color:var(--muted);">TikTok / ByteDance AI training crawler — collects content for LLM development</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>FacebookBot</code></td><td>Meta</td><td style="color:var(--muted);">Meta AI training crawler — collects content for Llama model training</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>Diffbot</code></td><td>Diffbot</td><td style="color:var(--muted);">AI-powered web extraction — builds structured knowledge graphs sold to AI companies</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>DataForSeoBot</code></td><td>DataForSEO</td><td style="color:var(--muted);">Data aggregator — collects content for AI training datasets and SEO intelligence</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>ImagesiftBot</code></td><td>Imagesift</td><td style="color:var(--muted);">Image and content crawler for AI training datasets</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                  <tr><td><code>TurnitinBot</code></td><td>Turnitin</td><td style="color:var(--muted);">Academic AI detection — indexes content for AI writing detection model training</td><td style="text-align:right;"><span class="badge badge-t5">Training Deals ⚡</span></td></tr>
+                </tbody>
+              </table>
             </div>
           </div>`;
 
@@ -2063,14 +2502,31 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 12. LOGIN  (unchanged from v26)
+    // 12. LOGIN
     // ============================================================
     if (path === "/login") {
       if (request.method === "POST") {
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rateCheck = await checkAdminRateLimit(ip, '/login', env);
+        if (!rateCheck.allowed) {
+          return new Response('Too many login attempts. Try again in 60 seconds.', {
+            status: 429,
+            headers: { 'Retry-After': String(rateCheck.retryAfter) }
+          });
+        }
         const d = await request.formData();
         const u = (d.get("user") || "").trim().toLowerCase();
         const p = (d.get("pass") || "").trim();
-        if (p === ADMIN_PASSWORD) return Response.redirect(url.origin + SECRET_ADMIN_PATH + "?pass=" + p, 302);
+        if (p === ADMIN_PASSWORD) {
+          const sessionToken = await createSessionToken(ADMIN_PASSWORD);
+          return new Response(null, {
+            status: 302,
+            headers: {
+              'Location': url.origin + SECRET_ADMIN_PATH,
+              'Set-Cookie': sessionCookieHeader(sessionToken),
+            },
+          });
+        }
         const auth = await env.DB.prepare("SELECT pub_user_id FROM publisher_entities WHERE LOWER(pub_user_id) = ? AND password = ? LIMIT 1").bind(u, p).first();
         if (auth) return Response.redirect(url.origin + "/dashboard?entity=" + auth.pub_user_id.toLowerCase(), 302);
         return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body>
@@ -2094,7 +2550,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 13-18. MISC API + ADMIN ENDPOINTS  (unchanged from v26)
+    // API ENDPOINTS
     // ============================================================
 
     // v27.2: Rate limit all /api/admin/* endpoints
@@ -2109,6 +2565,234 @@ async function handleRequest(request, env, ctx) {
       }
     }
 
+    // ============================================================
+    // /api/generate-report — Claude API personalized audit report
+    // ============================================================
+    if (path === "/api/generate-report") {
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const auditId = url.searchParams.get("audit_id");
+      const range   = url.searchParams.get("range") || "all";
+      if (!auditId) return Response.json({ error: "Missing audit_id" }, { status: 400 });
+
+      const publisher = await env.DB.prepare(
+        "SELECT * FROM publisher_entities WHERE audit_id = ? LIMIT 1"
+      ).bind(auditId).first();
+      if (!publisher) return Response.json({ error: "Audit not found" }, { status: 404 });
+
+      const dF = range === "7" ? "AND timestamp > datetime('now','-7 days')"
+               : range === "30" ? "AND timestamp > datetime('now','-30 days')" : "";
+
+      const [statsRow, botsResult, topPagesResult, stealthRow, trainingRow] = await Promise.all([
+        env.DB.prepare(`SELECT SUM(CASE WHEN is_bot=1 THEN 1 ELSE 0 END) as tB, SUM(CASE WHEN is_stealth=1 THEN 1 ELSE 0 END) as tS, SUM(CASE WHEN is_bot=1 AND is_training=0 THEN cpm_value ELSE 0 END) as tRev, SUM(CASE WHEN is_training=1 THEN 1 ELSE 0 END) as tTraining FROM bot_logs WHERE audit_id = ? ${dF}`).bind(auditId).first(),
+        env.DB.prepare(`SELECT bot_name, tier, COUNT(*) as hits, SUM(cpm_value) as revenue FROM bot_logs WHERE audit_id = ? AND is_bot = 1 ${dF} GROUP BY bot_name ORDER BY hits DESC LIMIT 10`).bind(auditId).all(),
+        env.DB.prepare(`SELECT path, COUNT(*) as hits FROM bot_logs WHERE audit_id = ? AND is_bot = 1 AND path IS NOT NULL AND path != '' ${dF} GROUP BY path ORDER BY hits DESC LIMIT 10`).bind(auditId).all(),
+        env.DB.prepare(`SELECT COUNT(*) as cnt FROM bot_logs WHERE audit_id = ? AND is_stealth = 1 ${dF}`).bind(auditId).first(),
+        env.DB.prepare(`SELECT COUNT(*) as cnt FROM bot_logs WHERE audit_id = ? AND is_training = 1 ${dF}`).bind(auditId).first(),
+      ]);
+
+      const totalHits     = statsRow?.tB || 0;
+      const totalRevenue  = statsRow?.tRev || 0;
+      const stealthCount  = stealthRow?.cnt || 0;
+      const trainingCount = trainingRow?.cnt || 0;
+      const daysOfData    = range === "7" ? 7 : range === "30" ? 30 : null;
+      const dailyRate     = daysOfData && totalRevenue > 0 ? totalRevenue / daysOfData : null;
+      const projMonthly   = dailyRate ? (dailyRate * 30).toFixed(2) : null;
+      const projAnnual    = dailyRate ? (dailyRate * 365).toFixed(2) : null;
+      const isSnippet     = publisher.integration_type === "B";
+      const today         = new Date().toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" });
+
+      const bots = botsResult.results || [];
+      const pages = topPagesResult.results || [];
+
+      const auditContext = {
+        publisher: publisher.domain_name,
+        auditId,
+        integrationName: isSnippet ? "JS Snippet" : "CNAME Standard",
+        period: daysOfData ? `${daysOfData} Days` : "All Time",
+        date: today,
+        totalHits,
+        estNetRevenue: totalRevenue.toFixed(4),
+        projMonthly: projMonthly || "N/A (select 7 or 30 day range)",
+        projAnnual: projAnnual || "N/A",
+        stealthCount,
+        trainingCount,
+        topBots: bots.map(b => {
+          const display = getBotDisplayName(b.bot_name || "");
+          return { name: display.name, company: display.company, tier: b.tier, hits: b.hits, revenue: (b.revenue||0).toFixed(4) };
+        }),
+        topPages: pages.map(p => ({ path: p.path, hits: p.hits })),
+        isSnippet,
+        cnameBenefit: isSnippet ? "40–60% additional bot traffic would be captured by upgrading to CNAME integration." : null,
+      };
+
+      try {
+        const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 2000,
+            system: "You are BotRev's AI report writer. Generate a professional, publisher-facing audit report in clean plain text with section headers. Be specific with the provided numbers. Do not invent data — only use what is provided. Write in a confident, clear tone. The report should feel personalized and actionable, not generic. Output ONLY the report text — no preamble, no markdown backticks.",
+            messages: [{
+              role: "user",
+              content: `Write a BotRev Content Intelligence Audit Report for ${auditContext.publisher} using this data: ${JSON.stringify(auditContext)}
+
+Include these sections:
+1. EXECUTIVE SUMMARY — 2-3 sentences with the key numbers. Lead with total bot hits and estimated revenue.
+2. TRAFFIC ANALYSIS — Describe the bot composition. Name the top 3-5 bots specifically (use display names and companies). Note any stealth crawlers.
+3. REVENUE MODEL — State the ${auditContext.period} net revenue. ${projMonthly ? `Project monthly ($${projMonthly}) and annual ($${projAnnual}) earnings.` : "Note that a 7 or 30-day window is needed for projections."}
+4. INTEGRATION STATUS — ${isSnippet ? `Publisher is on JS Snippet integration. Note that upgrading to CNAME would capture an estimated 40-60% more bot traffic including raw HTTP crawlers that skip JavaScript entirely. The T1 Premium AI bots (GPTBot, ClaudeBot, Perplexity) are likely visiting but invisible to the snippet.` : "Publisher is on full CNAME integration — all bot traffic captured at the DNS layer."}
+5. THE BIGGER PICTURE — This is the most important section. Explain that the real value of the BotRev audit log is not just the marketplace revenue — it is the tamper-evident, independent record of every AI interaction on the site. This log is the publisher's leverage for direct licensing negotiations with AI companies. As AI bot traffic grows, publishers with audit data will be in a fundamentally stronger negotiating position than those without. Marketplace CPMs are the floor. Direct licensing deals are the ceiling. Encourage the publisher to continue building their audit record and to contact their BotRev account manager about direct licensing opportunities.
+6. NEXT STEPS — 3-4 concrete recommendations based on the data.
+
+Sign off: Matt Krampen, Founder — BotRev | matt@botrev.com | botrev.com`
+            }]
+          })
+        });
+
+        const claudeData = await claudeRes.json();
+        if (claudeData.type === "error" || claudeData.error) {
+          return Response.json({ error: "Claude API error: " + (claudeData.error?.message || JSON.stringify(claudeData)) }, { status: 502 });
+        }
+        const reportText = claudeData.content?.find(b => b.type === "text")?.text || "";
+
+        const docxBytes = buildReportDocx({
+          publisher:      auditContext.publisher,
+          auditId,
+          period:         auditContext.period,
+          integration:    auditContext.integrationName,
+          date:           today,
+          totalHits:      auditContext.totalHits,
+          estNetRevenue:  auditContext.estNetRevenue,
+          stealthCount:   auditContext.stealthCount,
+          trainingCount:  auditContext.trainingCount,
+          topBots:        auditContext.topBots,
+          reportText,
+        });
+
+        const filename = `BotRev_Audit_${auditId}_${today.replace(/[,\s]+/g,"_")}.docx`;
+        return new Response(docxBytes, {
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+            "Access-Control-Allow-Origin": "*",
+          }
+        });
+
+      } catch(err) {
+        return Response.json({ error: "Report generation failed: " + err.message }, { status: 500 });
+      }
+    }
+
+    // ============================================================
+    // /api/generate-fleet-report — Consolidated fleet report via Claude API
+    // ============================================================
+    if (path === "/api/generate-fleet-report") {
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const idsParam = url.searchParams.get("ids") || "";
+      const auditIds = idsParam.split(",").map(s => s.trim()).filter(Boolean);
+      if (auditIds.length === 0) return Response.json({ error: "No publisher IDs provided" }, { status: 400 });
+
+      const today = new Date().toLocaleDateString("en-US", { year:"numeric", month:"long", day:"numeric" });
+
+      const publisherData = await Promise.all(auditIds.map(async (auditId) => {
+        const [publisher, statsRow, botsResult, trainingRow] = await Promise.all([
+          env.DB.prepare("SELECT * FROM publisher_entities WHERE audit_id = ? LIMIT 1").bind(auditId).first(),
+          env.DB.prepare("SELECT SUM(CASE WHEN is_bot=1 THEN 1 ELSE 0 END) as tB, SUM(CASE WHEN is_bot=1 AND is_training=0 THEN cpm_value ELSE 0 END) as tRev, SUM(CASE WHEN is_training=1 THEN 1 ELSE 0 END) as tTraining FROM bot_logs WHERE audit_id = ?").bind(auditId).first(),
+          env.DB.prepare("SELECT bot_name, tier, COUNT(*) as hits, SUM(cpm_value) as revenue FROM bot_logs WHERE audit_id = ? AND is_bot = 1 GROUP BY bot_name ORDER BY hits DESC LIMIT 5").bind(auditId).all(),
+          env.DB.prepare("SELECT COUNT(*) as cnt FROM bot_logs WHERE audit_id = ? AND is_training = 1").bind(auditId).first(),
+        ]);
+        if (!publisher) return null;
+        const bots = botsResult.results || [];
+        return {
+          domain: publisher.domain_name,
+          auditId,
+          integration: publisher.integration_type === "B" ? "JS Snippet" : "CNAME Standard",
+          totalHits: statsRow?.tB || 0,
+          estRevenue: (statsRow?.tRev || 0).toFixed(4),
+          trainingHits: trainingRow?.cnt || 0,
+          topBots: bots.map(b => {
+            const display = getBotDisplayName(b.bot_name || "");
+            return { name: display.name, company: display.company, tier: b.tier, hits: b.hits };
+          }),
+        };
+      }));
+
+      const validData = publisherData.filter(Boolean);
+      if (validData.length === 0) return Response.json({ error: "No publishers found" }, { status: 404 });
+
+      const fleetTotalHits = validData.reduce((s, p) => s + p.totalHits, 0);
+      const fleetTotalRevenue = validData.reduce((s, p) => s + parseFloat(p.estRevenue), 0).toFixed(4);
+      const fleetTrainingHits = validData.reduce((s, p) => s + p.trainingHits, 0);
+
+      try {
+        const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": env.ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01"
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 3000,
+            system: "You are BotRev's AI report writer. Generate a professional fleet-wide audit report in clean plain text with section headers. NEVER invent, estimate, or substitute numbers — only use what is provided in the data. If a number is not available, say so explicitly. Write in a confident, clear tone. Output ONLY the report text — no preamble, no markdown backticks.",
+            messages: [{
+              role: "user",
+              content: `Write a BotRev Fleet Intelligence Report for ${validData.length} publishers. Date: ${today}.
+
+Fleet summary: ${fleetTotalHits} total bot hits, $${fleetTotalRevenue} est. net revenue, ${fleetTrainingHits} unmonetized training hits.
+
+Publisher data:
+${validData.map(p => `- ${p.domain} (${p.integration}): ${p.totalHits} hits, $${p.estRevenue} revenue, ${p.trainingHits} training hits. Top bots: ${p.topBots.map(b => b.name + ' (' + b.company + ', T' + b.tier + ', ' + b.hits + ' hits)').join(', ')}`).join('\n')}
+
+Include sections:
+1. FLEET EXECUTIVE SUMMARY — Key numbers across all publishers.
+2. PUBLISHER BREAKDOWN — 2-3 sentences per publisher with their specific numbers.
+3. BOT LANDSCAPE — Which AI companies are crawling the fleet most aggressively.
+4. TRAINING GAP ANALYSIS — Quantify the unmonetized training bot hits and the revenue opportunity.
+5. STRATEGIC RECOMMENDATIONS — 3-4 fleet-wide recommendations.
+
+Sign off: Matt Krampen, Founder — BotRev | matt@botrev.com | botrev.com`
+            }]
+          })
+        });
+
+        const claudeData = await claudeRes.json();
+        if (claudeData.error) {
+          return Response.json({ error: "Claude API error: " + (claudeData.error.message || JSON.stringify(claudeData.error)) }, { status: 502 });
+        }
+        const reportText = claudeData.content?.find(b => b.type === "text")?.text || "";
+
+        // Build fleet report using same docx generator
+        // Use first publisher's data for the cover, fleet totals for stats
+        const firstPub = validData[0] || {};
+        const docxBytes = buildReportDocx({
+          publisher:      validData.map(p => p.domain).join(", "),
+          auditId:        validData.map(p => p.auditId).join(", "),
+          period:         "Fleet Report",
+          integration:    `${validData.length} Publisher${validData.length > 1 ? 's' : ''}`,
+          date:           today,
+          totalHits:      fleetTotalHits,
+          estNetRevenue:  fleetTotalRevenue,
+          stealthCount:   0,
+          trainingCount:  fleetTrainingHits,
+          topBots:        validData.flatMap(p => (p.topBots||[]).slice(0,2)).slice(0,8),
+          reportText,
+        });
+
+        const filename = `BotRev_Fleet_Report_${today.replace(/[,\s]+/g,"_")}.docx`;
+        return new Response(docxBytes, {
+          headers: {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          }
+        });
+      } catch(err) {
+        return Response.json({ error: "Fleet report generation failed: " + err.message }, { status: 500 });
+      }
+    }
+
     if (path === "/api/update-account" && request.method === "POST") {
       const eId = url.searchParams.get("entity");
       const pa  = url.searchParams.get("pass");
@@ -2117,9 +2801,8 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (path === "/api/admin/delete-publisher" && request.method === "POST") {
-      const pass    = url.searchParams.get("pass");
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       const auditId = url.searchParams.get("audit_id");
-      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       if (!auditId) return Response.json({ ok: false, error: "Missing audit_id" }, { status: 400 });
       try {
         await env.DB.prepare("DELETE FROM bot_logs               WHERE audit_id = ?").bind(auditId).run();
@@ -2133,13 +2816,12 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (path === "/api/admin/publisher-detail") {
-      const pass    = url.searchParams.get("pass");
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       const auditId = url.searchParams.get("audit_id");
-      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       if (!auditId) return Response.json({ ok: false, error: "Missing audit_id" }, { status: 400 });
       const publisher = await env.DB.prepare("SELECT * FROM publisher_entities WHERE audit_id = ? LIMIT 1").bind(auditId).first();
       if (!publisher) return Response.json({ ok: false, error: "Publisher not found" }, { status: 404 });
-      const markets = ['TollBit', 'Dappier', 'ProRata', 'Microsoft', 'Amazon'];
+      const markets = ['TollBit', 'Dappier', 'Microsoft', 'Amazon'];
       const keyRows = await env.DB.prepare("SELECT marketplace_name, api_key FROM publisher_marketplaces WHERE audit_id = ?").bind(auditId).all();
       const keys = {};
       markets.forEach(m => { keys[m] = ""; });
@@ -2148,8 +2830,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (path === "/api/admin/update-publisher" && request.method === "POST") {
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
       let body;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
       const { original_audit_id, pub_user_id, audit_id, domain_name, email, password, integration_type, origin_server, marketplace } = body;
@@ -2169,8 +2850,7 @@ async function handleRequest(request, env, ctx) {
     }
 
     if (path === "/api/admin/save-formula" && request.method === "POST") {
-      const pass = url.searchParams.get("pass");
-      if (pass !== ADMIN_PASSWORD) return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
+      if (!await isAdminAuthenticated(request, env)) return Response.json({ ok: false, error: "Forbidden" }, { status: 403 });
       try {
         const body = await request.json();
         const { audit_id, floor_cpm, beta } = body;
@@ -2187,17 +2867,13 @@ async function handleRequest(request, env, ctx) {
 
     if (path === "/api/admin/surge-action") {
       // v27.2: Verify HMAC-signed token instead of plain pass= parameter
-      // Tokens are time-limited (30 min) and cryptographically signed.
-      // Legacy pass= URLs no longer accepted.
       const tokenPayload = url.searchParams.get("payload");
       const tokenSig     = url.searchParams.get("sig");
 
-      // Support both new signed tokens and legacy pass= for backward compat during transition
       const legacyPass = url.searchParams.get("pass");
       let surgeId, auditId, action;
 
       if (tokenPayload && tokenSig) {
-        // New signed token path
         const verified = await verifySurgeToken(tokenPayload, tokenSig, env.ADMIN_PASS || '');
         if (!verified.valid) {
           const isHtml = (request.headers.get("Accept") || "").includes("text/html") || request.method === "GET";
@@ -2209,7 +2885,13 @@ async function handleRequest(request, env, ctx) {
         auditId = verified.auditId;
         action  = verified.action;
       } else if (legacyPass && legacyPass === ADMIN_PASSWORD) {
-        // Legacy pass= path — still works but deprecated
+        if (request.method === "POST") {
+          try { const body = await request.json(); surgeId=body.id; auditId=body.audit_id; action=body.action; } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
+        } else {
+          surgeId = url.searchParams.get("id"); auditId = url.searchParams.get("audit_id"); action = url.searchParams.get("action");
+        }
+      } else if (await isAdminAuthenticated(request, env)) {
+        // Session cookie auth for dashboard surge actions
         if (request.method === "POST") {
           try { const body = await request.json(); surgeId=body.id; auditId=body.audit_id; action=body.action; } catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400 }); }
         } else {
@@ -2228,7 +2910,7 @@ async function handleRequest(request, env, ctx) {
       if (surgeEvent.status === 'approved' || surgeEvent.status === 'rejected') {
         const msg = `This surge event was already ${surgeEvent.status}.`;
         const isHtml = (request.headers.get("Accept") || "").includes("text/html") || request.method === "GET";
-        if (isHtml) return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body><div style="display:flex; justify-content:center; align-items:center; min-height:100vh;"><div class="card" style="max-width:480px; text-align:center;"><div style="font-size:2rem; margin-bottom:12px;">ℹ️</div><h2 style="font-size:1.2rem; font-weight:700; color:var(--text); margin-bottom:8px;">Already Actioned</h2><p style="font-size:0.88rem; color:var(--muted); margin-bottom:20px;">${msg}</p><a href="${SURGE_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary">View Surge Intelligence →</a></div></div></body></html>`, { headers: { "Content-Type": "text/html" } });
+        if (isHtml) return new Response(`<!DOCTYPE html><html><head>${brandHead}</head><body><div style="display:flex; justify-content:center; align-items:center; min-height:100vh;"><div class="card" style="max-width:480px; text-align:center;"><div style="font-size:2rem; margin-bottom:12px;">ℹ️</div><h2 style="font-size:1.2rem; font-weight:700; color:var(--text); margin-bottom:8px;">Already Actioned</h2><p style="font-size:0.88rem; color:var(--muted); margin-bottom:20px;">${msg}</p><a href="${SURGE_ADMIN_PATH}" class="btn btn-primary">View Surge Intelligence →</a></div></div></body></html>`, { headers: { "Content-Type": "text/html" } });
         return Response.json({ ok: false, error: msg });
       }
 
@@ -2264,8 +2946,8 @@ async function handleRequest(request, env, ctx) {
     <h2 style="font-size:1.3rem; font-weight:800; color:var(--text); margin-bottom:8px;">${isApprove?`Surge Approved — $${actionedCpm.toFixed(2)} CPM`:'Surge Dismissed'}</h2>
     <p style="font-size:0.88rem; color:var(--muted); margin-bottom:20px; line-height:1.6;">${isApprove?`Recommended rate of $${actionedCpm.toFixed(2)} CPM applied to <strong>${surgeEvent.domain_name}</strong>.`:`Surge event for <strong>${surgeEvent.domain_name}</strong> dismissed.`}</p>
     ${tollbitNote}
-    <a href="${SURGE_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" class="btn btn-primary" style="display:inline-block; margin-bottom:10px;">← Back to Surge Intelligence</a><br>
-    <a href="${SECRET_ADMIN_PATH}?pass=${ADMIN_PASSWORD}" style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); text-decoration:none;">Fleet Command →</a>
+    <a href="${SURGE_ADMIN_PATH}" class="btn btn-primary" style="display:inline-block; margin-bottom:10px;">← Back to Surge Intelligence</a><br>
+    <a href="${SECRET_ADMIN_PATH}" style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); text-decoration:none;">Fleet Command →</a>
   </div>
 </div></body></html>`, { headers: { "Content-Type": "text/html" } });
       }
@@ -2274,18 +2956,47 @@ async function handleRequest(request, env, ctx) {
     }
 
     // ============================================================
-    // 19. HEALTH CHECK ENDPOINT — /health
+    // BOT SNIFFER API — /api/sniff  (v27: is_training flag added)
     // ============================================================
-    // Used by Cloudflare Health Checks to monitor BotRev's Worker.
-    // Returns 200 + JSON status when the Worker and D1 are operational.
-    // Returns 503 if D1 is unreachable — triggers Load Balancer failover.
-    // This endpoint is public — no auth required (monitoring agents need it).
+    if (path === "/api/sniff") {
+      const ua      = request.headers.get("User-Agent") || "Unknown";
+      const auditId = url.searchParams.get("audit_id") || "unknown";
+      const ref     = request.headers.get("Referer") || "";
+      const pagePath = url.searchParams.get("path") || null;
+
+      const botClass = classifyBot(ua);
+      const stealth  = isStealthCrawler(request);
+
+      const isCleanHuman = /mozilla|chrome|safari|firefox/i.test(ua)
+        && !stealth
+        && !botClass;
+
+      if (!isCleanHuman) {
+        const effectiveTier  = botClass ? botClass.tier : 4;
+        const effectiveCPM   = botClass ? botClass.cpm  : TIERS.TIER4;
+        const dampedCPM      = botClass?.isTraining ? 0 : await getDampedCPM(auditId, effectiveCPM);
+        const isStealthFlag  = (stealth && !botClass) ? 1 : 0;
+        const isTrainingFlag = botClass?.isTraining ? 1 : 0;
+
+        await env.DB.prepare(
+          "INSERT INTO bot_logs (audit_id, bot_name, tier, cpm_value, is_bot, is_stealth, is_training, referer, path) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)"
+        ).bind(auditId, ua, effectiveTier, dampedCPM, isStealthFlag, isTrainingFlag, ref, pagePath).run();
+      }
+
+      return new Response("OK", {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    // ============================================================
+    // HEALTH CHECK ENDPOINT — /health
     // ============================================================
     if (path === "/health") {
       const startMs = Date.now();
 
-      // Check D1 is reachable — a failed D1 means bot classification
-      // still works but logging and publisher lookup fail silently.
       let d1Status = "ok";
       let d1LatencyMs = null;
       try {
@@ -2296,7 +3007,6 @@ async function handleRequest(request, env, ctx) {
         d1Status = "error";
       }
 
-      // Count active publishers as a basic sanity check
       let publisherCount = null;
       try {
         const res = await env.DB.prepare(
@@ -2310,7 +3020,7 @@ async function handleRequest(request, env, ctx) {
 
       const body = JSON.stringify({
         status:           healthy ? "ok" : "degraded",
-        version:          "27.2",
+        version:          "28.1-combined",
         timestamp:        new Date().toISOString(),
         d1:               d1Status,
         d1_latency_ms:    d1LatencyMs,
@@ -2324,10 +3034,13 @@ async function handleRequest(request, env, ctx) {
         headers: {
           "Content-Type":  "application/json",
           "Cache-Control": "no-store, no-cache",
-          "X-BotRev-Version": "27.2",
+          "X-BotRev-Version": "28.1-combined",
         },
       });
     }
 
+    // ============================================================
+    // FALLBACK — pass through to origin
+    // ============================================================
     return fetch(request);
 }
