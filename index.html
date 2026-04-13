@@ -29,343 +29,118 @@
       --font-display:'Syne', sans-serif;
       --font-mono:   'DM Mono', monospace;
     }
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body { font-family: var(--font-display); background: var(--bg); color: var(--text); }
-
-    /* ── NAV ── */
-    nav {
-      background: var(--navy);
-      position: sticky; top: 0; z-index: 100;
-      box-shadow: 0 2px 16px rgba(30,58,95,0.2);
-    }
-    .nav-inner {
-      max-width: 1200px; margin: auto;
-      padding: 0 32px; height: 60px;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .logo {
-      font-family: var(--font-display); font-weight: 800;
-      font-size: 1.4rem; letter-spacing: 2px; text-transform: uppercase;
-      text-decoration: none; color: var(--green);
-    }
+    nav { background: var(--navy); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 16px rgba(30,58,95,0.2); }
+    .nav-inner { max-width: 1200px; margin: auto; padding: 0 32px; height: 60px; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: var(--font-display); font-weight: 800; font-size: 1.4rem; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; color: var(--green); }
     .logo span { color: var(--light-muted); }
     .nav-links { display: flex; gap: 8px; align-items: center; }
-    .nav-link {
-      color: var(--light-muted); text-decoration: none;
-      font-size: 0.82rem; font-weight: 600; padding: 6px 14px;
-      border-radius: 6px; transition: all 0.15s; letter-spacing: 0.5px;
-    }
+    .nav-link { color: var(--light-muted); text-decoration: none; font-size: 0.82rem; font-weight: 600; padding: 6px 14px; border-radius: 6px; transition: all 0.15s; letter-spacing: 0.5px; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.08); }
-    .nav-cta {
-      background: var(--green); color: #fff; text-decoration: none;
-      font-weight: 700; font-size: 0.82rem; padding: 8px 18px;
-      border-radius: 7px; letter-spacing: 0.5px; transition: all 0.15s;
-    }
+    .nav-cta { background: var(--green); color: #fff; text-decoration: none; font-weight: 700; font-size: 0.82rem; padding: 8px 18px; border-radius: 7px; letter-spacing: 0.5px; transition: all 0.15s; }
     .nav-cta:hover { background: var(--green-dim); }
-    .nav-portal {
-      color: var(--muted); text-decoration: none;
-      font-weight: 600; font-size: 0.82rem; padding: 8px 14px;
-      border-radius: 7px; border: 1px solid var(--border-lit);
-      letter-spacing: 0.5px; transition: all 0.15s;
-    }
+    .nav-portal { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 0.82rem; padding: 8px 14px; border-radius: 7px; border: 1px solid var(--border-lit); letter-spacing: 0.5px; transition: all 0.15s; }
     .nav-portal:hover { color: var(--navy); border-color: var(--navy-mid); background: var(--surface-2); }
-
-    /* ── HERO ── */
-    .hero {
-      background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 60%, #1a4f7a 100%);
-      padding: 64px 32px 56px;
-      position: relative; overflow: hidden;
-    }
-    .hero::before {
-      content: ''; position: absolute; inset: 0; pointer-events: none;
-      background:
-        radial-gradient(ellipse 70% 60% at 80% 50%, rgba(16,185,129,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 40% 40% at 10% 80%, rgba(59,126,200,0.12) 0%, transparent 60%);
-    }
-    .hero-inner {
-      max-width: 1200px; margin: auto; position: relative; z-index: 1;
-    }
-    .hero-eyebrow {
-      font-family: var(--font-mono); font-size: 0.65rem;
-      letter-spacing: 3px; text-transform: uppercase;
-      color: var(--green); margin-bottom: 16px;
-    }
-    .hero h1 {
-      font-size: clamp(2.4rem, 4vw, 3.4rem); font-weight: 800;
-      line-height: 1.1; color: #fff; margin-bottom: 20px;
-      max-width: 680px;
-    }
+    .hero { background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 60%, #1a4f7a 100%); padding: 64px 32px 56px; position: relative; overflow: hidden; }
+    .hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 70% 60% at 80% 50%, rgba(16,185,129,0.08) 0%, transparent 60%), radial-gradient(ellipse 40% 40% at 10% 80%, rgba(59,126,200,0.12) 0%, transparent 60%); }
+    .hero-inner { max-width: 1200px; margin: auto; position: relative; z-index: 1; }
+    .hero-eyebrow { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 3px; text-transform: uppercase; color: var(--green); margin-bottom: 16px; }
+    .hero h1 { font-size: clamp(2.4rem, 4vw, 3.4rem); font-weight: 800; line-height: 1.1; color: #fff; margin-bottom: 20px; max-width: 680px; }
     .hero h1 em { font-style: normal; color: var(--green); }
-    .hero-sub {
-      font-size: 1.05rem; line-height: 1.7; color: var(--light-muted);
-      margin-bottom: 36px; max-width: 560px;
-    }
+    .hero-sub { font-size: 1.05rem; line-height: 1.7; color: var(--light-muted); margin-bottom: 36px; max-width: 560px; }
     .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-    .btn-hero-primary {
-      background: var(--green); color: #fff; text-decoration: none;
-      font-weight: 700; font-size: 0.9rem; padding: 14px 28px;
-      border-radius: 8px; letter-spacing: 0.5px; transition: all 0.15s;
-      display: inline-flex; align-items: center; gap: 8px;
-    }
+    .btn-hero-primary { background: var(--green); color: #fff; text-decoration: none; font-weight: 700; font-size: 0.9rem; padding: 14px 28px; border-radius: 8px; letter-spacing: 0.5px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px; }
     .btn-hero-primary:hover { background: var(--green-dim); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(16,185,129,0.3); }
-    .btn-hero-ghost {
-      border: 1px solid rgba(168,197,232,0.4); color: var(--light-muted);
-      text-decoration: none; font-weight: 600; font-size: 0.9rem;
-      padding: 14px 28px; border-radius: 8px; transition: all 0.15s;
-      display: inline-flex; align-items: center; gap: 8px;
-    }
+    .btn-hero-ghost { border: 1px solid rgba(168,197,232,0.4); color: var(--light-muted); text-decoration: none; font-weight: 600; font-size: 0.9rem; padding: 14px 28px; border-radius: 8px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px; }
     .btn-hero-ghost:hover { border-color: var(--green); color: var(--green); }
-
-    /* Hero right — signal card */
-    .hero-card {
-      background: rgba(255,255,255,0.07); border: 1px solid rgba(168,197,232,0.2);
-      border-radius: 16px; padding: 32px; backdrop-filter: blur(10px);
-    }
-    .hero-card-label {
-      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--light-muted); margin-bottom: 20px;
-    }
-    .tier-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 0; border-bottom: 1px solid rgba(168,197,232,0.1);
-    }
-    .tier-row:last-child { border-bottom: none; }
-    .tier-label { font-size: 0.88rem; color: #CBD8E8; font-weight: 600; }
-    .tier-examples { font-family: var(--font-mono); font-size: 0.68rem; color: var(--light-muted); margin-top: 2px; }
-    .tier-signal { font-family: var(--font-mono); font-weight: 500; font-size: 0.8rem; letter-spacing: 1px; }
-    .sig-t1 { color: var(--green); }
-    .sig-t2 { color: #60A5FA; }
-    .sig-t3 { color: #FBBF24; }
-    .sig-t4 { color: var(--light-muted); }
-    .sig-t5 { color: var(--amber); }
-
-    /* ── TRUST STRIP ── */
-    .trust-strip {
-      background: var(--navy); padding: 24px 32px;
-      border-bottom: 3px solid var(--green);
-    }
-    .trust-inner {
-      max-width: 1100px; margin: auto;
-      display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-      align-items: center; gap: 0;
-    }
-    .trust-stat { text-align: center; }
-    .trust-val {
-      font-family: var(--font-mono); font-size: 1.8rem;
-      font-weight: 500; color: var(--green);
-    }
-    .trust-desc { font-size: 0.78rem; color: var(--light-muted); margin-top: 2px; }
-    .trust-div { width: 1px; height: 40px; background: rgba(168,197,232,0.15); }
-
-    /* ── SECTIONS ── */
     .section { padding: 80px 32px; }
     .section-inner { max-width: 1200px; margin: auto; }
     .section-alt { background: var(--surface); }
     .section-navy { background: var(--navy); }
-
-    .section-eyebrow {
-      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 3px;
-      text-transform: uppercase; color: var(--green); margin-bottom: 12px;
-    }
-    .section-title {
-      font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800;
-      color: var(--navy); line-height: 1.2; margin-bottom: 16px;
-    }
+    .section-eyebrow { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase; color: var(--green); margin-bottom: 12px; }
+    .section-title { font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: var(--navy); line-height: 1.2; margin-bottom: 16px; }
     .section-navy .section-title { color: #fff; }
-    .section-sub {
-      font-size: 1rem; color: var(--muted); line-height: 1.7;
-      max-width: 520px; margin-bottom: 48px;
-    }
+    .section-sub { font-size: 1rem; color: var(--muted); line-height: 1.7; max-width: 520px; margin-bottom: 48px; }
     .section-navy .section-sub { color: var(--light-muted); }
-
-    /* ── HOW IT WORKS ── */
     .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
-    .step {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 28px 24px;
-      box-shadow: 0 2px 8px rgba(30,58,95,0.06);
-      position: relative;
-    }
-    .step::before {
-      content: attr(data-n);
-      position: absolute; top: -14px; left: 24px;
-      background: var(--navy); color: var(--green);
-      font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500;
-      padding: 3px 10px; border-radius: 4px; letter-spacing: 1px;
-    }
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px 24px; box-shadow: 0 2px 8px rgba(30,58,95,0.06); position: relative; }
+    .step::before { content: attr(data-n); position: absolute; top: -14px; left: 24px; background: var(--navy); color: var(--green); font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; padding: 3px 10px; border-radius: 4px; letter-spacing: 1px; }
     .step h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
     .step p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
-    .step-tag {
-      display: inline-block; margin-top: 14px;
-      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 1px;
-      text-transform: uppercase; color: var(--green);
-      background: var(--green-tint); padding: 4px 10px; border-radius: 4px;
-    }
-
-    /* ── FEATURES ── */
+    .step-tag { display: inline-block; margin-top: 14px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 1px; text-transform: uppercase; color: var(--green); background: var(--green-tint); padding: 4px 10px; border-radius: 4px; }
     .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-    .feature-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-top: 3px solid var(--green); border-radius: 12px; padding: 28px;
-      box-shadow: 0 2px 8px rgba(30,58,95,0.06); transition: transform 0.2s, box-shadow 0.2s;
-    }
+    .feature-card { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--green); border-radius: 12px; padding: 28px; box-shadow: 0 2px 8px rgba(30,58,95,0.06); transition: transform 0.2s, box-shadow 0.2s; }
     .feature-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(30,58,95,0.12); }
     .feature-card.feature-amber { border-top-color: var(--amber); }
-    .feature-icon {
-      width: 44px; height: 44px; background: var(--green-tint);
-      border-radius: 10px; display: flex; align-items: center; justify-content: center;
-      font-size: 1.3rem; margin-bottom: 16px;
-    }
-    .feature-icon.amber-icon { background: var(--amber-tint); }
+    .feature-card.feature-blue { border-top-color: #3B7EC8; }
+    .feature-num { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; margin-bottom: 18px; letter-spacing: 1px; }
+    .feature-num.green { background: var(--green-tint); color: var(--green); border: 1px solid rgba(16,185,129,0.2); }
+    .feature-num.amber { background: var(--amber-tint); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+    .feature-num.blue { background: #EBF2FF; color: #3B7EC8; border: 1px solid rgba(59,126,200,0.2); }
     .feature-card h3 { font-size: 1.05rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
     .feature-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.65; }
-    .feature-card .feature-tag {
-      display: inline-block; margin-top: 14px;
-      font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px;
-      text-transform: uppercase; color: var(--muted);
-      border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px;
-    }
-    .feature-card .feature-tag.amber-tag {
-      color: var(--amber); border-color: var(--amber);
-      background: var(--amber-tint);
-    }
-
-    /* ── HOW YOU EARN ── */
+    .feature-card .feature-tag { display: inline-block; margin-top: 14px; font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; }
+    .feature-card .feature-tag.amber-tag { color: var(--amber); border-color: var(--amber); background: var(--amber-tint); }
+    .feature-card .feature-tag.blue-tag { color: #3B7EC8; border-color: #3B7EC8; background: #EBF2FF; }
+    .feature-card .feature-tag.coming-tag { color: var(--muted); border-color: var(--border); background: var(--bg); font-style: italic; }
     .earn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
-    .earn-summary { text-align: center; padding-top: 8px; }
-
-    /* Earn card — right column */
-    .earn-card {
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(168,197,232,0.15);
-      border-radius: 16px; padding: 32px;
-    }
-    .earn-card-label {
-      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--light-muted); margin-bottom: 20px;
-    }
-    .earn-row {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 14px 0; border-bottom: 1px solid rgba(168,197,232,0.08);
-    }
+    .earn-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(168,197,232,0.15); border-radius: 16px; padding: 32px; }
+    .earn-card-label { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: var(--light-muted); margin-bottom: 20px; }
+    .earn-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid rgba(168,197,232,0.08); }
     .earn-row:last-of-type { border-bottom: none; }
     .earn-row-label { font-size: 0.88rem; color: #CBD8E8; font-weight: 600; }
     .earn-row-desc { font-size: 0.75rem; color: var(--light-muted); margin-top: 3px; line-height: 1.5; max-width: 260px; }
-    .earn-row-signal {
-      font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 1px;
-      padding: 4px 10px; border-radius: 5px; border: 1px solid; flex-shrink: 0; margin-top: 2px;
-    }
+    .earn-row-signal { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 1px; padding: 4px 10px; border-radius: 5px; border: 1px solid; flex-shrink: 0; margin-top: 2px; }
     .earn-divider { height: 1px; background: rgba(168,197,232,0.12); margin: 20px 0; }
     .earn-summary { text-align: center; padding-top: 8px; }
-    .earn-summary-label {
-      font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px;
-      text-transform: uppercase; color: var(--green); margin-bottom: 8px;
-    }
+    .earn-summary-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--green); margin-bottom: 8px; }
     .earn-summary-copy { font-size: 0.88rem; color: var(--light-muted); line-height: 1.7; }
-
-    /* ── CTA ── */
-    .cta-section {
-      background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%);
-      padding: 80px 32px; text-align: center;
-      border-top: 3px solid var(--green);
-    }
+    .latency-callout { background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 16px 20px; margin-top: 24px; display: flex; align-items: center; gap: 14px; }
+    .latency-val { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 500; color: var(--green); flex-shrink: 0; }
+    .latency-desc { font-size: 0.8rem; color: var(--light-muted); line-height: 1.5; }
+    .cta-section { background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 100%); padding: 80px 32px; text-align: center; border-top: 3px solid var(--green); }
     .cta-section h2 { font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; color: #fff; margin-bottom: 14px; }
     .cta-section p { color: var(--light-muted); font-size: 1rem; max-width: 500px; margin: 0 auto 36px; line-height: 1.7; }
-    .cta-email {
-      display: inline-flex; align-items: center; gap: 10px;
-      background: var(--green); color: #fff; text-decoration: none;
-      font-weight: 700; font-size: 1rem; padding: 16px 32px;
-      border-radius: 10px; transition: all 0.15s;
-    }
+    .cta-email { display: inline-flex; align-items: center; gap: 10px; background: var(--green); color: #fff; text-decoration: none; font-weight: 700; font-size: 1rem; padding: 16px 32px; border-radius: 10px; transition: all 0.15s; }
     .cta-email:hover { background: var(--green-dim); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(16,185,129,0.35); }
-
-    /* ── FOOTER ── */
-    footer {
-      background: #0F2137; padding: 32px;
-      border-top: 1px solid rgba(168,197,232,0.1);
-    }
-    .footer-inner {
-      max-width: 1200px; margin: auto;
-      display: flex; justify-content: space-between; align-items: center;
-      flex-wrap: wrap; gap: 16px;
-    }
+    footer { background: #0F2137; padding: 32px; border-top: 1px solid rgba(168,197,232,0.1); }
+    .footer-inner { max-width: 1200px; margin: auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
     .footer-logo { font-family: var(--font-display); font-weight: 800; font-size: 1.1rem; letter-spacing: 2px; text-transform: uppercase; color: var(--green); text-decoration: none; }
     .footer-logo span { color: #4A6A8A; }
     .footer-links { display: flex; gap: 20px; }
     .footer-link { color: #4A6A8A; text-decoration: none; font-size: 0.82rem; transition: color 0.15s; }
     .footer-link:hover { color: var(--light-muted); }
     .footer-copy { color: #2D4A6A; font-size: 0.78rem; width: 100%; text-align: center; margin-top: 12px; }
-
-    /* ── MODAL ── */
     #auditModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,33,55,0.75); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px; }
-
-    /* ── RESPONSIVE ── */
     @media (max-width: 900px) {
-      .hero-inner { grid-template-columns: 1fr; }
-      .hero-card { display: none; }
       .steps { grid-template-columns: 1fr 1fr; }
       .features { grid-template-columns: 1fr 1fr; }
       .earn-grid { grid-template-columns: 1fr; }
-      .trust-div { display: none; }
     }
     @media (max-width: 600px) {
-      /* Nav */
       .nav-links .nav-link { display: none; }
       .nav-inner { padding: 0 16px; }
-
-      /* Hero */
       .hero { padding: 40px 16px 36px; }
       .hero h1 { font-size: 2rem; }
       .hero-sub { font-size: 0.92rem; }
       .hero-actions { flex-direction: column; }
       .btn-hero-primary, .btn-hero-ghost { width: 100%; text-align: center; }
-
-      /* Sections */
       .section { padding: 48px 16px; }
       .steps, .features { grid-template-columns: 1fr; }
       .section-inner { padding: 0; }
-
-      /* Trust strip */
-      .trust-strip { padding: 16px; }
-
-      /* Earn section */
       .earn-grid { grid-template-columns: 1fr; }
-
-      /* CTA */
       .cta-section { padding: 48px 16px; }
-
-      /* Footer */
       .footer-inner { flex-direction: column; gap: 12px; text-align: center; }
       .footer-links { justify-content: center; flex-wrap: wrap; }
-
-      /* Modal — full screen on mobile */
       #auditModal { padding: 12px; align-items: flex-end; }
-      #auditModal > div {
-        padding: 24px 20px 32px !important;
-        border-radius: 16px 16px 0 0 !important;
-        max-width: 100% !important;
-        width: 100% !important;
-        max-height: 90vh;
-        overflow-y: auto;
-      }
-      /* Form name/email grid collapses to single column on small screens */
-      #auditModal div[style*="grid-template-columns:1fr 1fr"] {
-        display: block !important;
-      }
-      #auditModal div[style*="grid-template-columns:1fr 1fr"] > div {
-        margin-bottom: 16px;
-      }
-      /* Bot blocking radio buttons — stack vertically */
-      #auditModal div[style*="grid-template-columns:1fr 1fr 1fr"] {
-        grid-template-columns: 1fr !important;
-      }
+      #auditModal > div { padding: 24px 20px 32px !important; border-radius: 16px 16px 0 0 !important; max-width: 100% !important; width: 100% !important; max-height: 90vh; overflow-y: auto; }
     }
   </style>
 </head>
 <body>
 
-  <!-- NAV -->
   <nav>
     <div class="nav-inner">
       <a class="logo" href="#">Bot<span>Rev</span></a>
@@ -373,52 +148,36 @@
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
         <a class="nav-link" href="#earn">Earnings</a>
-        <a class="nav-link" href="#marketplaces">Marketplaces</a>
         <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
         <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
       </div>
     </div>
   </nav>
 
-  <!-- AUDIT FORM MODAL -->
   <div id="auditModal">
     <div style="background:#fff; border-radius:16px; padding:40px; width:100%; max-width:480px; position:relative; box-shadow:0 32px 80px rgba(30,58,95,0.3);">
-      <button onclick="closeAuditForm()" style="position:absolute; top:16px; right:20px; background:none; border:none; cursor:pointer; font-size:1.4rem; color:#5A7FA8; line-height:1;">×</button>
+      <button onclick="closeAuditForm()" style="position:absolute; top:16px; right:20px; background:none; border:none; cursor:pointer; font-size:1.4rem; color:#5A7FA8; line-height:1;">x</button>
       <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:#10B981; margin-bottom:10px;">Free · No Commitment</div>
       <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:800; color:#1E3A5F; margin-bottom:6px;">Start Your Free Audit</h2>
-      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we'll reach out within 24 hours to kick off your free 7-day Content Intelligence Audit.</p>
-
+      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we will reach out within 24 hours to kick off your Content Intelligence Audit. Ongoing monitoring from day one.</p>
       <form id="auditForm" action="https://formspree.io/f/mjgagjbl" method="POST">
         <input type="hidden" name="_subject" value="New BotRev Audit Request">
         <input type="hidden" name="_replyto" id="replyToField" value="">
-
-        <!-- Row: Name + Email side by side -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
           <div>
             <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Name *</label>
-            <input type="text" name="name" required placeholder="Jane Smith"
-              style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;"
-              onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
+            <input type="text" name="name" required placeholder="Jane Smith" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
           </div>
           <div>
             <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Work Email *</label>
-            <input type="email" name="email" required placeholder="jane@yoursite.com"
-              oninput="document.getElementById('replyToField').value=this.value"
-              style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;"
-              onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
+            <input type="email" name="email" required placeholder="jane@yoursite.com" oninput="document.getElementById('replyToField').value=this.value" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
           </div>
         </div>
-
         <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Website URL *</label>
-        <input type="text" name="website" required placeholder="https://yoursite.com"
-          style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; transition:border-color 0.15s;"
-          onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-
+        <input type="text" name="website" required placeholder="https://yoursite.com" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
         <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Content Niche *</label>
-        <select name="niche" required
-          style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; background:#fff; transition:border-color 0.15s;"
-          onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-          <option value="">Select your niche…</option>
+        <select name="niche" required style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; background:#fff; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
+          <option value="">Select your niche...</option>
           <option>News &amp; Journalism</option>
           <option>Food &amp; Recipes</option>
           <option>Finance &amp; Business</option>
@@ -432,250 +191,173 @@
           <option>Lifestyle &amp; Home</option>
           <option>Other</option>
         </select>
-
-        <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:10px;">Have you tried blocking AI bots? *</label>
+        <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:10px;">Do you have active bot blocking? *</label>
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:24px;">
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;"
-            onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'">
-            <input type="radio" name="bot_blocking" value="Yes — actively blocking" required style="accent-color:#10B981;"> Yes
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;"
-            onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'">
-            <input type="radio" name="bot_blocking" value="No — not yet"> No
-          </label>
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;"
-            onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'">
-            <input type="radio" name="bot_blocking" value="Not sure"> Not sure
-          </label>
+          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="Yes" required style="accent-color:#10B981;"> Yes</label>
+          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="No"> No</label>
+          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="Not sure"> Not sure</label>
         </div>
-
-        <button type="submit" id="auditSubmitBtn"
-          style="width:100%; padding:14px; background:#10B981; color:#fff; border:none; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:0.95rem; cursor:pointer; transition:all 0.15s; letter-spacing:0.5px;"
-          onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">
-          → Send Audit Request
-        </button>
+        <button type="submit" id="auditSubmitBtn" style="width:100%; padding:14px; background:#10B981; color:#fff; border:none; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:0.95rem; cursor:pointer; transition:all 0.15s; letter-spacing:0.5px;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">Send Audit Request</button>
         <p style="font-size:0.75rem; color:#A8C5E8; text-align:center; margin-top:12px;">We'll respond within 24 hours. No spam, ever.</p>
       </form>
-
       <div id="auditSuccess" style="display:none; text-align:center; padding:20px 0;">
         <div style="font-size:2.5rem; margin-bottom:12px;">✓</div>
         <h3 style="font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:700; color:#1E3A5F; margin-bottom:8px;">Audit Request Received</h3>
-        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly to kick off your free 7-day Content Intelligence Audit.</p>
+        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly. Your Content Intelligence Audit runs continuously from day one.</p>
       </div>
     </div>
   </div>
 
-  <!-- HERO -->
   <section class="hero">
     <div class="hero-inner">
       <div>
         <div class="hero-eyebrow">Your content feeds the AI economy. Time to get paid.</div>
         <h1>Your content is<br>worth <em>more</em> than<br>you're earning.</h1>
-        <p class="hero-sub">AI companies are crawling your site thousands of times a day — training models, powering products, and building billion-dollar businesses on your work. BotRev's 7-day audit tells you exactly who's there, what they're worth, and gives you the independent data record you'll need to get paid for it. Start with visibility. Build toward direct deals.</p>
+        <p class="hero-sub">AI companies are crawling your site thousands of times a day, training models, powering products, and building billion-dollar businesses on your work. BotRev shows you exactly who is there, what they are worth, and builds the independent data record you will need to get paid for it. Start with visibility. Build toward direct deals.</p>
         <div class="hero-actions">
-          <a class="btn-hero-primary" href="#" onclick="openAuditForm(); return false;">→ Start Your Free Audit</a>
+          <a class="btn-hero-primary" href="#" onclick="openAuditForm(); return false;">Start Your Free Audit</a>
           <a class="btn-hero-ghost" href="#how">See How It Works</a>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- TRUST STRIP -->
-
-
-  <!-- HOW IT WORKS -->
   <section class="section" id="how">
     <div class="section-inner">
       <div class="section-eyebrow">The Process</div>
       <h2 class="section-title">From invisible AI traffic<br>to monthly earnings</h2>
-      <p class="section-sub">Four steps. No engineers needed. BotRev handles everything — you stay focused on publishing.</p>
+      <p class="section-sub">Four steps. No engineers needed. BotRev handles everything.</p>
       <div class="steps">
-
         <div class="step" data-n="STEP 01">
           <h3>Quick One-Time Setup</h3>
-          <p>Getting started takes just a few minutes and a single configuration change on your site — no code, no plugins, no engineers required. Works with every major publishing platform, CMS, and web host. Your readers never notice a thing.</p>
+          <p>Getting started takes just a few minutes and a single configuration change on your site. No code, no plugins, no engineers required. Works with every major publishing platform, CMS, and web host. Your human visitors never notice a thing.</p>
           <span class="step-tag">Works on any platform</span>
         </div>
-
         <div class="step" data-n="STEP 02">
-          <h3>Free 7-Day Content Intelligence Audit</h3>
-          <p>See results immediately. BotRev analyzes AI activity across your site — identifying every agent type visiting your content, how often, and what that activity is worth. You get a clear, data-backed picture of your content's value in the AI economy before you commit to anything.</p>
-          <span class="step-tag">No signup required</span>
+          <h3>Content Intelligence Audit</h3>
+          <p>See results immediately. BotRev analyzes AI activity across your site continuously, identifying every agent type visiting your content, how often, and what that activity is worth. Your audit record builds every day, giving you stronger data for direct licensing conversations over time.</p>
+          <span class="step-tag">Ongoing — always building</span>
         </div>
-
         <div class="step" data-n="STEP 03">
-          <h3>The Bot Wrapper</h3>
-          <p>BotRev runs continuously in the background — classifying every AI interaction, building your independent audit record, and managing your presence in the AI content licensing ecosystem. The data you accumulate is your foundation for every direct licensing conversation you'll ever have with an AI company.</p>
+          <h3>"Bot Bouncer" and Routing</h3>
+          <p>BotRev runs continuously in the background, classifying every AI interaction, routing monetizable bots to the highest-paying marketplace, and managing your presence in the AI content licensing ecosystem. The data you accumulate is your foundation for every direct licensing conversation you will ever have with an AI company.</p>
           <span class="step-tag">Fully managed</span>
         </div>
-
         <div class="step" data-n="STEP 04">
           <h3>Monthly Earnings Statement</h3>
-          <p>Each month you receive a clear, unified earnings statement — every AI interaction logged, every dollar accounted for, independently verified by BotRev's own data. One payment, full transparency.</p>
-          <span class="step-tag">Publisher-first reporting</span>
+          <p>Each month you receive a clear, unified earnings statement. Every AI interaction logged, every dollar accounted for. One payment, full transparency.</p>
+          <span class="step-tag">Publisher first reporting</span>
         </div>
-
       </div>
     </div>
   </section>
 
-  <!-- FEATURES -->
   <section class="section section-alt" id="features">
     <div class="section-inner">
       <div class="section-eyebrow">The Platform</div>
       <h2 class="section-title">Built for online content owners<br>in the age of AI</h2>
-      <p class="section-sub">BotRev gives domain owners complete content intelligence and earnings infrastructure — including a new revenue stream most publishers don't even know exists.</p>
+      <p class="section-sub">BotRev gives domain owners complete content intelligence and earnings infrastructure, including new revenue from emerging content marketplaces.</p>
       <div class="features">
-
         <div class="feature-card">
-          <div class="feature-icon">⚡</div>
           <h3>AI Traffic Detection</h3>
-          <p>BotRev identifies every AI agent visiting your site — from the largest language model companies to headless automation tools — and classifies each one by type, intent, and content value signal. All invisible to your readers.</p>
+          <p>BotRev identifies every AI agent visiting your site, from the largest language model companies to headless automation tools, and classifies each one by type, intent, and content value. All invisible to your readers.</p>
           <span class="feature-tag">Always on</span>
         </div>
-
         <div class="feature-card">
-          <div class="feature-icon">📈</div>
-          <h3>Proprietary Rate Optimization</h3>
-          <p>BotRev's Surge Intelligence engine monitors demand signals across your content in real time — so when AI interest spikes, your rates follow. But the bigger picture is the data: every surge event is logged, timestamped, and stored in your independent audit record. When you sit down to negotiate a direct licensing deal, you have the receipts.</p>
+          <h3>Surge Intelligence</h3>
+          <p>BotRev monitors AI interest across your content in real time. When activity on a specific article or topic spikes, your rates follow automatically. Every surge event is logged, timestamped, and stored in your independent audit record. When you sit down to negotiate a direct licensing deal, you have the receipts.</p>
           <span class="feature-tag">Fully automated</span>
         </div>
-
-        <!-- NEW: Training Deals -->
         <div class="feature-card feature-amber">
-          <div class="feature-icon amber-icon">🤝</div>
           <h3>BotRev Training Deals</h3>
-          <p>Some AI companies send crawlers specifically to collect content for model training — a category most monetization platforms ignore entirely. BotRev detects this traffic, quantifies it, and connects publishers directly with LLM companies for licensing agreements. A revenue stream no one else is capturing for you.</p>
+          <p>Some AI companies send crawlers specifically to collect content for model training, a category most monetization platforms ignore entirely. BotRev detects this traffic, quantifies it, and connects publishers directly with AI companies for licensing agreements.</p>
           <span class="feature-tag amber-tag">New revenue stream</span>
         </div>
-
         <div class="feature-card">
-          <div class="feature-icon">📊</div>
+          <h3>"Bot Bouncer"</h3>
+          <p>Publishers choose exactly which bots can access their content. Block by bot name, company, or entire category. BotRev's proprietary "Bot Bouncer" intercepts unwanted crawlers before they ever reach your site. Full control, zero code required.</p>
+          <span class="feature-tag">Publisher controlled</span>
+        </div>
+        <div class="feature-card">
           <h3>Publisher Dashboard</h3>
-          <p>Real-time AI traffic data, earnings tracking, and content performance — in one clean, easy-to-read dashboard. No training required. Log in with your Network ID and Access Key and see results immediately.</p>
+          <p>Real-time AI traffic data, earnings tracking, and content performance in one clean, easy-to-read dashboard. No training required. Log in with your Network ID and Access Key and see results immediately.</p>
           <span class="feature-tag">Live data</span>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">🔒</div>
-          <h3>Content Intelligence Reports</h3>
-          <p>Learn which of your articles, topics, and content formats attract the most AI attention — and what that attention is worth. BotRev turns your traffic data into editorial insights you can actually act on.</p>
-          <span class="feature-tag">Coming soon</span>
+        <div class="feature-card feature-blue">
+          <h3>LLM Referral Tracking</h3>
+          <p>Find out which AI platforms are recommending your content and sending human readers to your site. Measure AI-driven referrals alongside bot traffic for a complete picture of your content's value in the AI economy.</p>
+          <span class="feature-tag coming-tag">Coming soon</span>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">📋</div>
-          <h3>Bot Extraction Optimization</h3>
-          <p>BEO is the machine-readable equivalent of SEO. BotRev helps structure your content so AI agents can find it, cite it, and credit your brand — giving you visibility inside AI responses, not just search results.</p>
-          <span class="feature-tag">New discipline</span>
-        </div>
-
       </div>
     </div>
   </section>
 
-  <!-- HOW YOU EARN -->
   <section class="section section-navy" id="earn">
     <div class="section-inner">
       <div class="section-eyebrow" style="color:var(--green);">How You Earn</div>
       <div class="earn-grid">
-
-        <!-- LEFT: value props -->
         <div>
-          <h2 class="section-title">Publisher-first.<br>Zero upfront cost.</h2>
+          <h2 class="section-title">Publisher first.<br>Zero upfront cost.</h2>
           <p class="section-sub">BotRev earns only when you earn. No monthly fees. No setup costs. No surprises.</p>
-        </div>
 
-        <!-- RIGHT: classification card -->
+        </div>
         <div class="earn-card">
           <div class="earn-card-label">What BotRev Classifies For You</div>
           <div class="earn-row">
             <div>
-              <div class="earn-row-label">Premium AI Agents</div>
-              <div class="earn-row-desc">The largest AI companies — language models, reasoning engines, and RAG-based research tools consuming your content at scale.</div>
+              <div class="earn-row-label">T1 · Premium AI Inference</div>
+              <div class="earn-row-desc">The largest AI platforms fetching your content in real time to answer live user queries.</div>
             </div>
-            <div class="earn-row-signal" style="border-color:#10B981; color:#10B981;">HIGH VALUE</div>
+            <div class="earn-row-signal" style="border-color:#10B981; color:#10B981;">High Value</div>
           </div>
           <div class="earn-row">
             <div>
-              <div class="earn-row-label">Advanced Automation</div>
-              <div class="earn-row-desc">Headless browsers and scraping frameworks extracting your content for commercial applications.</div>
+              <div class="earn-row-label">T2 · Headless Scrapers</div>
+              <div class="earn-row-desc">Headless browsers and third-party scrapers extracting your content for commercial AI applications.</div>
             </div>
-            <div class="earn-row-signal" style="border-color:#60A5FA; color:#60A5FA;">MEDIUM</div>
+            <div class="earn-row-signal" style="border-color:#60A5FA; color:#60A5FA;">Medium Value</div>
           </div>
           <div class="earn-row">
             <div>
-              <div class="earn-row-label">Search Intelligence</div>
-              <div class="earn-row-desc">Verified search engine crawlers indexing your content for discovery and AI-powered answers.</div>
+              <div class="earn-row-label">T3 · Utility Bots</div>
+              <div class="earn-row-desc">SEO crawlers, analytics tools, and general utility bots. Logged, classified, and monetized.</div>
             </div>
-            <div class="earn-row-signal" style="border-color:#FBBF24; color:#FBBF24;">STANDARD</div>
+            <div class="earn-row-signal" style="border-color:#FBBF24; color:#FBBF24;">Low Value</div>
           </div>
           <div class="earn-row">
             <div>
-              <div class="earn-row-label">General Crawlers</div>
-              <div class="earn-row-desc">Unidentified automated agents and utility bots — logged, classified, and accounted for.</div>
+              <div class="earn-row-label">T4 · Training Crawlers</div>
+              <div class="earn-row-desc">Bots collecting your content specifically for LLM model training. Logged for direct licensing leverage.</div>
             </div>
-            <div class="earn-row-signal" style="border-color:#5A7FA8; color:#5A7FA8;">TRACKED</div>
+            <div class="earn-row-signal" style="border-color:#F59E0B; color:#F59E0B;">Training Deals</div>
           </div>
           <div class="earn-row">
             <div>
-              <div class="earn-row-label">AI Training Crawlers ⚡</div>
-              <div class="earn-row-desc">Bots collecting your content specifically for LLM model training. BotRev Training Deals connects you directly with AI companies for licensing agreements — a category most platforms leave on the table.</div>
+              <div class="earn-row-label">T5 · Verified Search</div>
+              <div class="earn-row-desc">Googlebot, Bingbot, and major search crawlers. Always pass-through. Your SEO is always protected.</div>
             </div>
-            <div class="earn-row-signal" style="border-color:#F59E0B; color:#F59E0B;">TRAINING DEALS</div>
+            <div class="earn-row-signal" style="border-color:#5A7FA8; color:#5A7FA8;">Pass-Through</div>
           </div>
           <div class="earn-divider"></div>
           <div class="earn-summary">
             <div class="earn-summary-label">The BotRev Difference</div>
-            <div class="earn-summary-copy">Every category above is actively happening on your site right now. BotRev captures it all — routing your bot traffic through the best-performing AI content marketplaces while building the independent audit record that positions you for direct licensing deals. Start earning from day one.</div>
+            <div class="earn-summary-copy">Every category above is actively happening on your site right now. BotRev captures it all, routing your bot traffic through the best performing AI content marketplaces while building the independent audit record that positions you for direct licensing deals. Start earning from day one.</div>
           </div>
         </div>
-
       </div>
     </div>
   </section>
 
-  <!-- MARKETPLACE PARTNERS -->
-  <section class="section" id="marketplaces" style="padding:48px 32px;">
-    <div class="section-inner" style="text-align:center;">
-      <div class="section-eyebrow">Marketplace Agnostic</div>
-      <h2 class="section-title" style="margin-bottom:12px;">Connected to where AI companies pay for content</h2>
-      <p class="section-sub" style="max-width:600px; margin:0 auto 40px;">BotRev routes your AI traffic through the marketplaces with active AI company demand — and keeps you positioned for the direct licensing deals that are emerging with Microsoft, Amazon, and beyond. We connect you to all of them.</p>
-      <div style="display:flex; justify-content:center; align-items:center; gap:32px; flex-wrap:wrap; margin-bottom:16px;">
-        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
-          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">TollBit</div>
-          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
-        </div>
-        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
-          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Microsoft PCM</div>
-          <div style="font-size:0.7rem; color:var(--muted);">Publisher Content Marketplace</div>
-        </div>
-        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
-          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Amazon</div>
-          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
-        </div>
-        <div style="text-align:center; padding:16px 24px; background:var(--surface); border:1px solid var(--border); border-radius:10px; min-width:140px;">
-          <div style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; color:var(--text); margin-bottom:4px;">Dappier</div>
-          <div style="font-size:0.7rem; color:var(--muted);">AI Content Marketplace</div>
-      </div>
-      <p style="font-family:var(--font-mono); font-size:0.65rem; color:var(--muted); letter-spacing:1px;">MORE MARKETPLACES ADDED REGULARLY · BOTREV ROUTES TO WHERE DEMAND IS HIGHEST</p>
-    </div>
-  </section>
-
-  <!-- CTA -->
   <section class="cta-section">
     <div class="section-eyebrow" style="color:var(--green); margin-bottom:12px;">Get Started Today</div>
     <h2>Find out what your<br>content is really worth.</h2>
-    <p>Free 7-day Content Intelligence Audit. No commitment, no cost. We show you the exact value of your AI traffic — then you decide what to do with it.</p>
-    <a class="cta-email" href="#" onclick="openAuditForm(); return false;">
-      → Request Your Free Audit
-    </a>
+    <p>Free Content Intelligence Audit. No commitment, no cost. We show you the exact value of your AI traffic, then you decide what to do with it.</p>
+    <a class="cta-email" href="#" onclick="openAuditForm(); return false;">Request Your Free Audit</a>
     <div style="margin-top:20px; font-family:var(--font-mono); font-size:0.7rem; color:rgba(168,197,232,0.5);">
-      Already a publisher? <a href="https://dash.botrev.com/login" style="color:var(--green); text-decoration:none;">Sign in to your dashboard →</a>
+      Already a publisher? <a href="https://dash.botrev.com/login" style="color:var(--green); text-decoration:none;">Sign in to your dashboard</a>
     </div>
   </section>
 
-  <!-- FOOTER -->
   <footer>
     <div class="footer-inner">
       <a class="footer-logo" href="#">Bot<span>Rev</span></a>
@@ -685,18 +367,16 @@
         <a class="footer-link" href="/privacy.html">Privacy Policy</a>
       </div>
     </div>
-    <div class="footer-copy">© 2026 BotRev LLC. The AI Monetization Layer for Publishers. Chicago, IL.</div>
+    <div class="footer-copy">2026 BotRev LLC. The AI Monetization Layer for Publishers. Chicago, IL.</div>
   </footer>
 
   <script>
     function openAuditForm() {
-      const modal = document.getElementById('auditModal');
-      modal.style.display = 'flex';
+      document.getElementById('auditModal').style.display = 'flex';
       document.body.style.overflow = 'hidden';
     }
     function closeAuditForm() {
-      const modal = document.getElementById('auditModal');
-      modal.style.display = 'none';
+      document.getElementById('auditModal').style.display = 'none';
       document.body.style.overflow = '';
     }
     document.getElementById('auditModal').addEventListener('click', function(e) {
@@ -708,24 +388,20 @@
     document.getElementById('auditForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const btn = document.getElementById('auditSubmitBtn');
-      btn.textContent = 'Sending…';
+      btn.textContent = 'Sending...';
       btn.disabled = true;
       btn.style.opacity = '0.7';
       try {
-        const res = await fetch(this.action, {
-          method: 'POST',
-          body: new FormData(this),
-          headers: { 'Accept': 'application/json' }
-        });
+        const res = await fetch(this.action, { method: 'POST', body: new FormData(this), headers: { 'Accept': 'application/json' } });
         if (res.ok) {
           document.getElementById('auditForm').style.display = 'none';
           document.getElementById('auditSuccess').style.display = 'block';
         } else {
-          btn.textContent = 'Error — try again';
+          btn.textContent = 'Error - try again';
           btn.disabled = false; btn.style.opacity = '1';
         }
       } catch {
-        btn.textContent = 'Error — try again';
+        btn.textContent = 'Error - try again';
         btn.disabled = false; btn.style.opacity = '1';
       }
     });
