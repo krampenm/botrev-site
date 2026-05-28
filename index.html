@@ -113,7 +113,6 @@
     .footer-link { color: #4A6A8A; text-decoration: none; font-size: 0.82rem; transition: color 0.15s; }
     .footer-link:hover { color: var(--light-muted); }
     .footer-copy { color: #2D4A6A; font-size: 0.78rem; width: 100%; text-align: center; margin-top: 12px; }
-    #auditModal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(15,33,55,0.75); backdrop-filter:blur(6px); justify-content:center; align-items:center; padding:24px; }
     @media (max-width: 900px) {
       .steps { grid-template-columns: 1fr 1fr; }
       .features { grid-template-columns: 1fr 1fr; }
@@ -134,8 +133,6 @@
       .cta-section { padding: 48px 16px; }
       .footer-inner { flex-direction: column; gap: 12px; text-align: center; }
       .footer-links { justify-content: center; flex-wrap: wrap; }
-      #auditModal { padding: 12px; align-items: flex-end; }
-      #auditModal > div { padding: 24px 20px 32px !important; border-radius: 16px 16px 0 0 !important; max-width: 100% !important; width: 100% !important; max-height: 90vh; overflow-y: auto; }
     }
   </style>
 </head>
@@ -148,66 +145,12 @@
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
         <a class="nav-link" href="#earn">Earnings</a>
-        <a class="nav-link" href="#signup" style="color:var(--green); border:1px solid var(--green); padding:6px 14px; border-radius:6px; font-weight:700;">Get My Free Snippet</a>
         <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
-        <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
+        <a class="nav-cta" href="#signup">Start Free Audit</a>
       </div>
     </div>
   </nav>
 
-  <div id="auditModal">
-    <div style="background:#fff; border-radius:16px; padding:40px; width:100%; max-width:480px; position:relative; box-shadow:0 32px 80px rgba(30,58,95,0.3);">
-      <button onclick="closeAuditForm()" style="position:absolute; top:16px; right:20px; background:none; border:none; cursor:pointer; font-size:1.4rem; color:#5A7FA8; line-height:1;">x</button>
-      <div style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:3px; text-transform:uppercase; color:#10B981; margin-bottom:10px;">Free · No Commitment</div>
-      <h2 style="font-family:'Syne',sans-serif; font-size:1.5rem; font-weight:800; color:#1E3A5F; margin-bottom:6px;">Start Your Free Audit</h2>
-      <p style="font-size:0.88rem; color:#5A7FA8; margin-bottom:28px; line-height:1.6;">Tell us about your site and we will reach out to kick off your Content Intelligence Audit. Ongoing monitoring from day one.</p>
-      <form id="auditForm" action="https://formspree.io/f/mjgagjbl" method="POST">
-        <input type="hidden" name="_subject" value="New BotRev Audit Request">
-        <input type="hidden" name="_replyto" id="replyToField" value="">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-          <div>
-            <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Name *</label>
-            <input type="text" name="name" required placeholder="Jane Smith" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-          </div>
-          <div>
-            <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Work Email *</label>
-            <input type="email" name="email" required placeholder="jane@yoursite.com" oninput="document.getElementById('replyToField').value=this.value" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; box-sizing:border-box; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-          </div>
-        </div>
-        <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Website URL *</label>
-        <input type="text" name="website" required placeholder="https://yoursite.com" style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-        <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:6px;">Content Niche *</label>
-        <select name="niche" required style="width:100%; padding:11px 14px; border:1px solid #E2EAF4; border-radius:8px; font-family:'Syne',sans-serif; font-size:0.9rem; color:#1E3A5F; outline:none; margin-bottom:16px; background:#fff; transition:border-color 0.15s;" onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2EAF4'">
-          <option value="">Select your niche...</option>
-          <option>News &amp; Journalism</option>
-          <option>Food &amp; Recipes</option>
-          <option>Finance &amp; Business</option>
-          <option>Technology</option>
-          <option>Sports</option>
-          <option>Health &amp; Wellness</option>
-          <option>Travel</option>
-          <option>Entertainment &amp; Pop Culture</option>
-          <option>B2B / Trade Publication</option>
-          <option>Education</option>
-          <option>Lifestyle &amp; Home</option>
-          <option>Other</option>
-        </select>
-        <label style="font-family:'DM Mono',monospace; font-size:0.6rem; letter-spacing:2px; text-transform:uppercase; color:#5A7FA8; display:block; margin-bottom:10px;">Do you have active bot blocking? *</label>
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:24px;">
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="Yes" required style="accent-color:#10B981;"> Yes</label>
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="No"> No</label>
-          <label style="display:flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid #E2EAF4; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:0.82rem; color:#1E3A5F; transition:border-color 0.15s;" onmouseover="this.style.borderColor='#10B981'" onmouseout="this.style.borderColor='#E2EAF4'"><input type="radio" name="bot_blocking" value="Not sure"> Not sure</label>
-        </div>
-        <button type="submit" id="auditSubmitBtn" style="width:100%; padding:14px; background:#10B981; color:#fff; border:none; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:0.95rem; cursor:pointer; transition:all 0.15s; letter-spacing:0.5px;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">Send Audit Request</button>
-        <p style="font-size:0.75rem; color:#A8C5E8; text-align:center; margin-top:12px;">We'll be in touch. No spam, ever.</p>
-      </form>
-      <div id="auditSuccess" style="display:none; text-align:center; padding:20px 0;">
-        <div style="font-size:2.5rem; margin-bottom:12px;">✓</div>
-        <h3 style="font-family:'Syne',sans-serif; font-size:1.2rem; font-weight:700; color:#1E3A5F; margin-bottom:8px;">Audit Request Received</h3>
-        <p style="font-size:0.88rem; color:#5A7FA8; line-height:1.6;">The BotRev team will be in touch shortly. Your Content Intelligence Audit runs continuously from day one.</p>
-      </div>
-    </div>
-  </div>
 
   <section class="hero">
     <div class="hero-inner">
@@ -216,7 +159,7 @@
         <h1>Your content is<br>worth <em>more</em> than<br>you're earning.</h1>
         <p class="hero-sub">AI companies are crawling your site thousands of times a day, training models, powering products, and building billion-dollar businesses on your work. BotRev shows you exactly who is there, what they are worth, and builds the independent data record you will need to get paid for it. Start with visibility. Build toward direct deals.</p>
         <div class="hero-actions">
-          <a class="btn-hero-primary" href="#" onclick="openAuditForm(); return false;">Start Your Free Audit</a>
+          <a class="btn-hero-primary" href="#signup">Start Your Free Audit</a>
           <a class="btn-hero-ghost" href="#how">See How It Works</a>
         </div>
       </div>
@@ -360,7 +303,7 @@
               </select>
             </div>
           </div>
-          <button type="submit" id="signupBtn" style="width:100%; padding:14px; background:var(--green); color:#fff; border:none; border-radius:8px; font-family:var(--font-display); font-weight:700; font-size:0.95rem; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">Get My Free Snippet</button>
+          <button type="submit" id="signupBtn" style="width:100%; padding:14px; background:var(--green); color:#fff; border:none; border-radius:8px; font-family:var(--font-display); font-weight:700; font-size:0.95rem; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">Start My Free Audit</button>
         </form>
         <div id="signupSuccess" style="display:none; text-align:center; padding:32px 0;">
           <div style="font-size:2rem; margin-bottom:12px;">&#10003;</div>
@@ -431,7 +374,7 @@
     <div class="section-eyebrow" style="color:var(--green); margin-bottom:12px;">Get Started Today</div>
     <h2>Find out what your<br>content is really worth.</h2>
     <p>Free Content Intelligence Audit. No commitment, no cost. We show you the exact value of your AI traffic, then you decide what to do with it.</p>
-    <a class="cta-email" href="#" onclick="openAuditForm(); return false;">Request Your Free Audit</a>
+    <a class="cta-email" href="#signup">Start Your Free Audit</a>
     <div style="margin-top:20px; font-family:var(--font-mono); font-size:0.7rem; color:rgba(168,197,232,0.5);">
       Already a publisher? <a href="https://dash.botrev.com/login" style="color:var(--green); text-decoration:none;">Sign in to your dashboard</a>
     </div>
@@ -441,50 +384,13 @@
     <div class="footer-inner">
       <a class="footer-logo" href="#">Bot<span>Rev</span></a>
       <div class="footer-links">
-        <a class="footer-link" href="#" onclick="openAuditForm(); return false;">Contact</a>
+        <a class="footer-link" href="#signup">Start Free Audit</a>
         <a class="footer-link" href="https://dash.botrev.com/login">Publisher Portal</a>
         <a class="footer-link" href="/privacy.html">Privacy Policy</a>
       </div>
     </div>
     <div class="footer-copy">2026 BotRev LLC. The AI Monetization Layer for Publishers. Chicago, IL.</div>
   </footer>
-
-  <script>
-    function openAuditForm() {
-      document.getElementById('auditModal').style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-    }
-    function closeAuditForm() {
-      document.getElementById('auditModal').style.display = 'none';
-      document.body.style.overflow = '';
-    }
-    document.getElementById('auditModal').addEventListener('click', function(e) {
-      if (e.target === this) closeAuditForm();
-    });
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') closeAuditForm();
-    });
-    document.getElementById('auditForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const btn = document.getElementById('auditSubmitBtn');
-      btn.textContent = 'Sending...';
-      btn.disabled = true;
-      btn.style.opacity = '0.7';
-      try {
-        const res = await fetch(this.action, { method: 'POST', body: new FormData(this), headers: { 'Accept': 'application/json' } });
-        if (res.ok) {
-          document.getElementById('auditForm').style.display = 'none';
-          document.getElementById('auditSuccess').style.display = 'block';
-        } else {
-          btn.textContent = 'Error - try again';
-          btn.disabled = false; btn.style.opacity = '1';
-        }
-      } catch {
-        btn.textContent = 'Error - try again';
-        btn.disabled = false; btn.style.opacity = '1';
-      }
-    });
-  </script>
 
   <script>
 async function handleSignup(e) {
@@ -505,7 +411,7 @@ async function handleSignup(e) {
   if (!domain || !domain.includes('.')) {
     errEl.textContent = 'Please enter a valid domain (e.g. yoursite.com).';
     errEl.style.display = 'block';
-    btn.textContent = 'Get My Free Snippet';
+    btn.textContent = 'Start My Free Audit';
     btn.disabled = false;
     btn.style.opacity = '1';
     return false;
@@ -536,7 +442,7 @@ async function handleSignup(e) {
     errEl.textContent = 'Network error. Please try again.';
     errEl.style.display = 'block';
   }
-  btn.textContent = 'Get My Free Snippet';
+  btn.textContent = 'Start My Free Audit';
   btn.disabled = false;
   btn.style.opacity = '1';
   return false;
