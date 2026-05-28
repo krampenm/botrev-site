@@ -148,6 +148,7 @@
         <a class="nav-link" href="#how">How It Works</a>
         <a class="nav-link" href="#features">Platform</a>
         <a class="nav-link" href="#earn">Earnings</a>
+        <a class="nav-link" href="#signup" style="color:var(--green); border:1px solid var(--green); padding:6px 14px; border-radius:6px; font-weight:700;">Get My Free Snippet</a>
         <a class="nav-portal" href="https://dash.botrev.com/login">Publisher Login</a>
         <a class="nav-cta" href="#" onclick="openAuditForm(); return false;">Start Free Audit</a>
       </div>
@@ -292,6 +293,84 @@
     </div>
   </section>
 
+  <section class="section" id="signup" style="background:linear-gradient(135deg, rgba(16,185,129,0.03) 0%, rgba(45,90,142,0.03) 100%);">
+    <div class="section-inner">
+      <div style="max-width:640px; margin:auto; text-align:center;">
+        <div class="section-eyebrow">Get Started Free</div>
+        <h2 class="section-title">Start your Content<br>Intelligence Audit</h2>
+        <p class="section-sub" style="margin:0 auto 36px;">Paste one snippet. See every AI bot hitting your site within 24 hours. No credit card, no engineers, no DNS changes.</p>
+      </div>
+      <div style="max-width:560px; margin:auto;">
+        <form id="signupForm" onsubmit="return handleSignup(event)">
+          <div id="signupError" style="display:none; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:0.85rem; color:#991b1b;"></div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Full Name *</label>
+              <input name="name" required placeholder="Jane Smith" style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none;">
+            </div>
+            <div>
+              <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Work Email *</label>
+              <input name="email" type="email" required placeholder="you@publisher.com" style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none;">
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Website URL *</label>
+            <input name="domain" required placeholder="https://yoursite.com" style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none;">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Content Niche *</label>
+            <select name="niche" required style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none; cursor:pointer;">
+              <option value="">Select your niche…</option>
+              <option>News &amp; Journalism</option>
+              <option>Sports</option>
+              <option>Entertainment</option>
+              <option>Technology</option>
+              <option>Finance &amp; Business</option>
+              <option>Health &amp; Wellness</option>
+              <option>Education</option>
+              <option>Food &amp; Recipes</option>
+              <option>Travel</option>
+              <option>Real Estate</option>
+              <option>Automotive</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">
+            <div>
+              <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Monthly Pageviews</label>
+              <select name="monthly_pageviews" style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none; cursor:pointer;">
+                <option value="">Optional</option>
+                <option>Under 10K</option>
+                <option>10K-100K</option>
+                <option>100K-500K</option>
+                <option>500K-1M</option>
+                <option>1M-5M</option>
+                <option>5M+</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-family:var(--font-mono); font-size:0.58rem; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px;">Hosting Provider</label>
+              <select name="hosting_provider" style="width:100%; padding:11px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:0.85rem; outline:none; cursor:pointer;">
+                <option value="">Optional</option>
+                <option>WordPress</option>
+                <option>Cloudflare</option>
+                <option>Wix</option>
+                <option>Squarespace</option>
+                <option>Custom/Other</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" id="signupBtn" style="width:100%; padding:14px; background:var(--green); color:#fff; border:none; border-radius:8px; font-family:var(--font-display); font-weight:700; font-size:0.95rem; cursor:pointer; letter-spacing:0.5px; transition:all 0.15s;" onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10B981'">Get My Free Snippet</button>
+        </form>
+        <div id="signupSuccess" style="display:none; text-align:center; padding:32px 0;">
+          <div style="font-size:2rem; margin-bottom:12px;">&#10003;</div>
+          <h3 style="font-size:1.3rem; font-weight:800; color:var(--navy); margin-bottom:8px;">You are in.</h3>
+          <p style="font-size:0.95rem; color:var(--muted); line-height:1.7;">Check your email for your snippet code and dashboard login.<br>Your Content Intelligence Audit starts the moment you paste it in.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section section-navy" id="earn">
     <div class="section-inner">
       <div class="section-eyebrow" style="color:var(--green);">How You Earn</div>
@@ -405,6 +484,63 @@
         btn.disabled = false; btn.style.opacity = '1';
       }
     });
+  </script>
+
+  <script>
+async function handleSignup(e) {
+  e.preventDefault();
+  const form = document.getElementById('signupForm');
+  const btn = document.getElementById('signupBtn');
+  const errEl = document.getElementById('signupError');
+  errEl.style.display = 'none';
+  btn.textContent = 'Setting up your account…';
+  btn.disabled = true;
+  btn.style.opacity = '0.7';
+
+  const fd = new FormData(form);
+  let domain = (fd.get('domain') || '').trim();
+  // Normalize domain
+  domain = domain.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').toLowerCase();
+
+  if (!domain || !domain.includes('.')) {
+    errEl.textContent = 'Please enter a valid domain (e.g. yoursite.com).';
+    errEl.style.display = 'block';
+    btn.textContent = 'Get My Free Snippet';
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    return false;
+  }
+
+  try {
+    const res = await fetch('https://dash.botrev.com/api/self-onboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: fd.get('name'),
+        email: fd.get('email'),
+        domain: domain,
+        niche: fd.get('niche'),
+        monthly_pageviews: fd.get('monthly_pageviews') || '',
+        hosting_provider: fd.get('hosting_provider') || '',
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      form.style.display = 'none';
+      document.getElementById('signupSuccess').style.display = 'block';
+    } else {
+      errEl.textContent = data.error || 'Something went wrong. Please try again.';
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    errEl.textContent = 'Network error. Please try again.';
+    errEl.style.display = 'block';
+  }
+  btn.textContent = 'Get My Free Snippet';
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  return false;
+}
   </script>
 
 </body>
